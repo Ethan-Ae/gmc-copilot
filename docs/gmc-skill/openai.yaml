@@ -1,0 +1,6 @@
+interface:
+  display_name: "GMC Shopify Compliance Audit"
+  short_description: "Strict GMC compliance workflow"
+  default_prompt: "Use $gmc-shopify-compliance-audit to audit and align this Shopify store, feed app, and Merchant Center before requesting review."
+policy:
+  allow_implicit_invocation: true
