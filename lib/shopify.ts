@@ -21,12 +21,10 @@ export function getEnv(): ShopifyEnv {
   return { apiKey, apiSecret, scopes, appUrl };
 }
 
-// Only allow real *.myshopify.com domains
 export function isValidShop(shop: string): boolean {
   return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop);
 }
 
-// Verify the HMAC signature Shopify adds to the OAuth callback query
 export function verifyHmac(query: URLSearchParams, secret: string): boolean {
   const hmac = query.get("hmac");
   if (!hmac) return false;
@@ -49,5 +47,4 @@ export function verifyHmac(query: URLSearchParams, secret: string): boolean {
   return crypto.timingSafeEqual(a, b);
 }
 
-// Latest STABLE Admin API version (bump each quarter)
 export const SHOPIFY_API_VERSION = "2026-04";

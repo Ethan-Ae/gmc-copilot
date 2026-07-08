@@ -27,7 +27,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid HMAC" }, { status: 403 });
   }
 
-  // Exchange the authorization code for an offline access token
   const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -48,7 +47,6 @@ export async function GET(req: NextRequest) {
 
   const { access_token } = (await tokenRes.json()) as { access_token: string };
 
-  // MVP proof: no database yet. Use the token to read the shop + a few products.
   const query = `{
     shop { name myshopifyDomain currencyCode }
     products(first: 5) {
