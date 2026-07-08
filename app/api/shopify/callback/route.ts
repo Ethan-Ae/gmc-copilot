@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  getEnv,
-  isValidShop,
-  verifyHmac,
-  SHOPIFY_API_VERSION,
-} from "../../../../lib/shopify";
+import { getEnv, isValidShop, verifyHmac } from "../../../../lib/shopify";
 import { saveShopToken } from "../../../../lib/db";
 
 export const runtime = "nodejs";
@@ -48,34 +43,12 @@ export async function GET(req: NextRequest) {
   // Persist the token so the connection survives without reinstalling
   await saveShopToken(shop, accessToken, tokenJson.scope ?? null);
 
-  const query = `{
-    shop { name myshopifyDomain currencyCode }
-    products(first: 5) { edges { node { title status onlineStoreUrl } } }
-  }`;
-
-  const dataRes = await fetch(
-    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": accessToken,
-      },
-      body: JSON.stringify({ query }),
-    },
+  // Connection done: hand the merchant off to the audit report.
+  const reportUrl = new URL(
+    `/report?shop=${encodeURIComponent(shop)}`,
+    req.nextUrl.origin,
   );
-  const data = await dataRes.json();
-
-  const res = NextResponse.json(
-    {
-      connected: true,
-      saved_to_db: true,
-      shop,
-      data,
-      note: "Token saved to the database. Visit /api/shopify/shop?shop=<domain> to read it back without reinstalling.",
-    },
-    { status: 200 },
-  );
+  const res = NextResponse.redirect(reportUrl, { status: 303 });
   res.cookies.delete("shopify_oauth_state");
   return res;
 }
