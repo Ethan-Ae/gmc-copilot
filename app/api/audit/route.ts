@@ -14,33 +14,74 @@ You are a strict Google Merchant Center (GMC) compliance auditor.
 You are given a PARTIAL snapshot of a Shopify store: shop identity and product data only.
 You do NOT have the store policies, theme, or Merchant Center data in this snapshot.
 
-Audit ONLY what is present in the snapshot. Never invent policies, prices, reviews,
-or Merchant Center statuses you were not given. If something important is missing to
-judge compliance, list it as an issue with area "needs-verification" instead of guessing.
+Audit ONLY what is present. Never invent policies, prices, reviews, or Merchant Center
+statuses you were not given. If something important is missing to judge compliance, add an
+issue with area "needs-verification" instead of guessing.
 
-Apply the compliance rules from the knowledge above: unsupported claims, fake or risky
+Apply the compliance rules from the knowledge above: unsupported claims, hype or risky
 wording in titles/descriptions/SEO, suspicious compare-at prices, missing or weak product
-data, availability/status problems, and anything that reads like marketing hype rather
+data, availability/status mismatches, and anything that reads like marketing hype rather
 than a verifiable fact.
 
-In any text you write, do not use long dashes. Use "-".
+In any text you write, do not use long dashes; use "-". Keep each issue concise.
 
-Respond with ONLY a valid JSON object, no markdown, no preamble, in exactly this shape:
-{
-  "overall": "go" | "warning" | "no-go",
-  "summary": "2-3 sentence plain summary of the store's GMC readiness on product data",
-  "issues": [
-    {
-      "area": "product" | "seo" | "pricing" | "images" | "identity" | "needs-verification",
-      "product": "product title or null if store-wide",
-      "severity": "high" | "medium" | "low",
-      "problem": "what is wrong and why it risks a GMC misrepresentation review",
-      "fix": "concrete, verifiable correction"
-    }
-  ],
-  "checked": ["short list of what you were able to check"]
-}
+Report your findings by calling the report_audit tool.
 </role>`;
+
+const AUDIT_TOOL: Anthropic.Tool = {
+  name: "report_audit",
+  description: "Return the GMC compliance audit result as structured data.",
+  input_schema: {
+    type: "object",
+    properties: {
+      overall: {
+        type: "string",
+        enum: ["go", "warning", "no-go"],
+        description: "Overall GMC readiness verdict for the product data checked.",
+      },
+      summary: {
+        type: "string",
+        description: "2-3 sentence plain summary of readiness.",
+      },
+      issues: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            area: {
+              type: "string",
+              enum: [
+                "product",
+                "seo",
+                "pricing",
+                "images",
+                "identity",
+                "needs-verification",
+              ],
+            },
+            product: {
+              type: ["string", "null"],
+              description: "Product title, or null if store-wide.",
+            },
+            severity: { type: "string", enum: ["high", "medium", "low"] },
+            problem: {
+              type: "string",
+              description: "What is wrong and why it risks a GMC review.",
+            },
+            fix: { type: "string", description: "Concrete, verifiable correction." },
+          },
+          required: ["area", "severity", "problem", "fix"],
+        },
+      },
+      checked: {
+        type: "array",
+        items: { type: "string" },
+        description: "Short list of what was able to be checked.",
+      },
+    },
+    required: ["overall", "summary", "issues", "checked"],
+  },
+};
 
 export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop")?.trim().toLowerCase();
@@ -64,7 +105,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Pull the product data the audit needs (read_products scope)
   const query = `{
     shop { name myshopifyDomain currencyCode contactEmail }
     products(first: 20) {
@@ -103,39 +143,45 @@ export async function GET(req: NextRequest) {
   const anthropic = new Anthropic({ apiKey });
   const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
 
-  let audit: unknown;
   try {
     const msg = await anthropic.messages.create({
       model,
       max_tokens: 8000,
       system: SYSTEM,
+      tools: [AUDIT_TOOL],
+      tool_choice: { type: "tool", name: "report_audit" },
       messages: [
         {
           role: "user",
           content:
             "Here is the Shopify store snapshot to audit (JSON):\n\n" +
             JSON.stringify(shopData?.data ?? shopData) +
-            "\n\nReturn ONLY the JSON audit object described in your instructions.",
+            "\n\nCall report_audit with your findings.",
         },
       ],
     });
 
-    const text = msg.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+    const toolBlock = msg.content.find(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+    );
 
-    try {
-      audit = JSON.parse(text.replace(/```json|```/g, "").trim());
-    } catch {
-      audit = { parse_error: true, raw: text };
+    if (!toolBlock) {
+      return NextResponse.json(
+        { error: "Model did not return structured output", stop_reason: msg.stop_reason },
+        { status: 502 },
+      );
     }
+
+    return NextResponse.json({
+      shop,
+      model,
+      truncated: msg.stop_reason === "max_tokens",
+      audit: toolBlock.input,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: "Anthropic API call failed", detail: String(err) },
       { status: 502 },
     );
   }
-
-  return NextResponse.json({ shop, model, audit });
 }
