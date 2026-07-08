@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
 import { getShopToken } from "../../../lib/db";
 import { GMC_SKILL } from "../../../lib/gmcSkill";
+import { crawlStorefront, type CrawlResult } from "../../../lib/crawl";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,19 +12,48 @@ const SYSTEM = `${GMC_SKILL}
 
 <role>
 You are a strict Google Merchant Center (GMC) compliance auditor.
-You are given a PARTIAL snapshot of a Shopify store: shop identity and product data only.
-You do NOT have the store policies, theme, or Merchant Center data in this snapshot.
+You are given a snapshot of a Shopify store made of two parts:
+1. PRODUCT DATA from the Shopify Admin API: shop identity and products.
+2. PUBLIC STOREFRONT CONTENT crawled from the live site: the home page, the
+   default Shopify policy pages (refund, shipping, privacy, terms of service,
+   legal notice, subscription), the contact and about pages, and up to 3 product
+   pages. Each crawled page has a url, an HTTP status, and plain text (truncated).
+   status 0 means the page could not be fetched; 404 means it does not exist;
+   empty text means nothing usable was returned for that page.
 
-Audit ONLY what is present. Never invent policies, prices, reviews, or Merchant Center
-statuses you were not given. If something important is missing to judge compliance, add an
-issue with area "needs-verification" instead of guessing.
+You do NOT have Merchant Center data or the feed app in this snapshot.
 
-Apply the compliance rules from the knowledge above: unsupported claims, hype or risky
-wording in titles/descriptions/SEO, suspicious compare-at prices, missing or weak product
-data, availability/status mismatches, and anything that reads like marketing hype rather
-than a verifiable fact.
+Audit ONLY what is present. Never invent policies, prices, reviews, delivery
+times, or Merchant Center statuses you were not given. If something important is
+missing to judge compliance, add an issue with area "needs-verification" instead
+of guessing. Apply the zero-invention rule from the knowledge above.
 
-In any text you write, do not use long dashes; use "-". Keep each issue concise.
+Audit the PRODUCT DATA as before: unsupported claims, hype or risky wording in
+titles/descriptions/SEO, suspicious compare-at prices, missing or weak product
+data, availability/status mismatches, and anything that reads like marketing
+hype rather than a verifiable fact.
+
+Audit the STOREFRONT CONTENT in addition:
+- Policy completeness and consistency. Shipping (area "shipping"): delivery time,
+  cost, target countries, processing/cutoff. Returns/refunds (area "returns"):
+  return window, fees, damaged goods, refund processing time. Contact details and
+  legal notice / business identity (area "policy"). Flag a required policy page
+  that is missing (status 404) and that GMC relies on.
+- Unsupported claims on the storefront (area "claims"): fake or unverifiable
+  reviews, star ratings, trust badges, warranties or guarantees not backed by a
+  policy, "free delivery" that is not justified, scarcity or urgency, unrealistic
+  discounts or compare-at prices.
+- Consistency between policies, storefront text, and product data: shipping and
+  return terms, currency, prices, availability, business identity, contact.
+
+If the store is locked behind a Shopify password page, you will be told so.
+Still audit the product data, and report the locked storefront as an issue with
+area "theme" (it blocks a real GMC crawl), noting that policies and storefront
+claims could not be verified.
+
+Write the summary, problem, and fix fields in FRENCH. Keep overall, area, and
+severity as the English codes defined by the tool. In any text you write, do not
+use long dashes; use "-". Keep each issue concise.
 
 Report your findings by calling the report_audit tool.
 </role>`;
@@ -41,7 +71,7 @@ const AUDIT_TOOL: Anthropic.Tool = {
       },
       summary: {
         type: "string",
-        description: "2-3 sentence plain summary of readiness.",
+        description: "2-3 sentence plain summary of readiness, written in French.",
       },
       issues: {
         type: "array",
@@ -56,6 +86,11 @@ const AUDIT_TOOL: Anthropic.Tool = {
                 "pricing",
                 "images",
                 "identity",
+                "policy",
+                "shipping",
+                "returns",
+                "claims",
+                "theme",
                 "needs-verification",
               ],
             },
@@ -66,9 +101,13 @@ const AUDIT_TOOL: Anthropic.Tool = {
             severity: { type: "string", enum: ["high", "medium", "low"] },
             problem: {
               type: "string",
-              description: "What is wrong and why it risks a GMC review.",
+              description:
+                "What is wrong and why it risks a GMC review, written in French.",
             },
-            fix: { type: "string", description: "Concrete, verifiable correction." },
+            fix: {
+              type: "string",
+              description: "Concrete, verifiable correction, written in French.",
+            },
           },
           required: ["area", "severity", "problem", "fix"],
         },
@@ -140,6 +179,22 @@ export async function GET(req: NextRequest) {
   );
   const shopData = await shopRes.json();
 
+  // Product handles from the Admin API feed the storefront product crawl.
+  type ProductEdge = { node?: { handle?: string } };
+  const productEdges: ProductEdge[] = shopData?.data?.products?.edges ?? [];
+  const handles = productEdges
+    .map((e) => e?.node?.handle)
+    .filter((h): h is string => typeof h === "string" && h.length > 0);
+
+  // Crawl the public storefront (home, policies, pages, products). A crawl
+  // failure must not break the audit, so degrade to an empty result.
+  let crawl: CrawlResult;
+  try {
+    crawl = await crawlStorefront(shop, handles);
+  } catch {
+    crawl = { locked: false, pages: [] };
+  }
+
   const anthropic = new Anthropic({ apiKey });
   const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
 
@@ -154,9 +209,19 @@ export async function GET(req: NextRequest) {
         {
           role: "user",
           content:
-            "Here is the Shopify store snapshot to audit (JSON):\n\n" +
+            "Here is the Shopify store snapshot to audit.\n\n" +
+            "1) PRODUCT DATA (JSON):\n" +
             JSON.stringify(shopData?.data ?? shopData) +
-            "\n\nCall report_audit with your findings.",
+            "\n\n2) PUBLIC STOREFRONT CONTENT (JSON):\n" +
+            JSON.stringify(crawl) +
+            (crawl.locked
+              ? "\n\nNOTE: the storefront is locked behind a Shopify password " +
+                "page, so policies and storefront claims could not be crawled. " +
+                'Report a locked storefront (area "theme") and still audit the ' +
+                "product data."
+              : "") +
+            "\n\nWrite the summary, problem, and fix fields in French. " +
+            "Call report_audit with your findings.",
         },
       ],
     });

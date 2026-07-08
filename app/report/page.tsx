@@ -13,6 +13,11 @@ type Area =
   | "pricing"
   | "images"
   | "identity"
+  | "policy"
+  | "shipping"
+  | "returns"
+  | "claims"
+  | "theme"
   | "needs-verification";
 
 interface Issue {
@@ -80,6 +85,11 @@ const AREA_LABEL: Record<Area, string> = {
   pricing: "Prix",
   images: "Images",
   identity: "Identite",
+  policy: "Politiques",
+  shipping: "Livraison",
+  returns: "Retours",
+  claims: "Allegations",
+  theme: "Vitrine",
   "needs-verification": "A verifier",
 };
 
