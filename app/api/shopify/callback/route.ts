@@ -5,6 +5,7 @@ import {
   verifyHmac,
   SHOPIFY_API_VERSION,
 } from "../../../../lib/shopify";
+import { saveShopToken } from "../../../../lib/db";
 
 export const runtime = "nodejs";
 
@@ -30,28 +31,26 @@ export async function GET(req: NextRequest) {
   const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      client_id: apiKey,
-      client_secret: apiSecret,
-      code,
-    }),
+    body: JSON.stringify({ client_id: apiKey, client_secret: apiSecret, code }),
   });
 
   if (!tokenRes.ok) {
     const detail = await tokenRes.text();
-    return NextResponse.json(
-      { error: "Token exchange failed", detail },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: "Token exchange failed", detail }, { status: 502 });
   }
 
-  const { access_token } = (await tokenRes.json()) as { access_token: string };
+  const tokenJson = (await tokenRes.json()) as {
+    access_token: string;
+    scope?: string;
+  };
+  const accessToken = tokenJson.access_token;
+
+  // Persist the token so the connection survives without reinstalling
+  await saveShopToken(shop, accessToken, tokenJson.scope ?? null);
 
   const query = `{
     shop { name myshopifyDomain currencyCode }
-    products(first: 5) {
-      edges { node { title status onlineStoreUrl } }
-    }
+    products(first: 5) { edges { node { title status onlineStoreUrl } } }
   }`;
 
   const dataRes = await fetch(
@@ -60,20 +59,20 @@ export async function GET(req: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Shopify-Access-Token": access_token,
+        "X-Shopify-Access-Token": accessToken,
       },
       body: JSON.stringify({ query }),
     },
   );
-
   const data = await dataRes.json();
 
   const res = NextResponse.json(
     {
       connected: true,
+      saved_to_db: true,
       shop,
       data,
-      note: "OAuth works. Token read live data. Persistence (DB) and the audit engine come next.",
+      note: "Token saved to the database. Visit /api/shopify/shop?shop=<domain> to read it back without reinstalling.",
     },
     { status: 200 },
   );
