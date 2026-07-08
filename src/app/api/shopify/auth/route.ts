@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getEnv, isValidShop } from "@/lib/shopify";
+import { getEnv, isValidShop } from "../../../../lib/shopify";
 
 export const runtime = "nodejs";
 

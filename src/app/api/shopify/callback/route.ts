@@ -4,7 +4,7 @@ import {
   isValidShop,
   verifyHmac,
   SHOPIFY_API_VERSION,
-} from "@/lib/shopify";
+} from "../../../../lib/shopify";
 
 export const runtime = "nodejs";
 
