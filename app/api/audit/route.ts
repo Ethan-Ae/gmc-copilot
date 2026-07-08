@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
   try {
     const msg = await anthropic.messages.create({
       model,
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: SYSTEM,
       messages: [
         {
