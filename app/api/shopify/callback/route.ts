@@ -17,11 +17,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing shop or code" }, { status: 400 });
   }
 
-  // state = `${randomHex}.${userId}`; only randomHex is checked against the cookie.
+  // state = `${randomHex}.${userId}`; randomHex is checked against the cookie
+  // and the userId must be the one embedded at /api/shopify/auth start.
   const [randomHex, ...userIdParts] = (state ?? "").split(".");
   const userId = userIdParts.join(".") || null;
   if (!randomHex || !cookieState || randomHex !== cookieState) {
     return NextResponse.json({ error: "Invalid state" }, { status: 403 });
+  }
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Missing user in state" },
+      { status: 403 },
+    );
   }
   if (!verifyHmac(params, apiSecret)) {
     return NextResponse.json({ error: "Invalid HMAC" }, { status: 403 });

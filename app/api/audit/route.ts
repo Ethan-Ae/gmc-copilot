@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@clerk/nextjs/server";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
-import { getShopToken } from "../../../lib/db";
+import { getShopToken, getShopOwner } from "../../../lib/db";
 import { saveAudit } from "../../../lib/audits";
 import { GMC_SKILL } from "../../../lib/gmcSkill";
 import { crawlStorefront, type CrawlResult } from "../../../lib/crawl";
@@ -125,9 +125,20 @@ const AUDIT_TOOL: Anthropic.Tool = {
 };
 
 export async function GET(req: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const shop = req.nextUrl.searchParams.get("shop")?.trim().toLowerCase();
   if (!shop || !isValidShop(shop)) {
     return NextResponse.json({ error: "Invalid shop" }, { status: 400 });
+  }
+
+  // The shop must belong to the signed-in user before we read or audit it.
+  const owner = await getShopOwner(shop);
+  if (owner !== userId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const token = await getShopToken(shop);
@@ -241,14 +252,11 @@ export async function GET(req: NextRequest) {
 
     const audit = toolBlock.input as { overall?: string };
 
-    // Historise the audit against the signed-in user, when there is one.
-    const { userId } = await auth();
-    if (userId) {
-      try {
-        await saveAudit(userId, shop, audit.overall ?? "unknown", audit);
-      } catch {
-        // persistence must never break returning the audit to the caller
-      }
+    // Historise the audit against the signed-in user (verified above).
+    try {
+      await saveAudit(userId, shop, audit.overall ?? "unknown", audit);
+    } catch {
+      // persistence must never break returning the audit to the caller
     }
 
     return NextResponse.json({

@@ -52,6 +52,15 @@ export async function getShopToken(shop: string): Promise<string | null> {
   return rows.length ? rows[0].access_token : null;
 }
 
+export async function getShopOwner(shop: string): Promise<string | null> {
+  await ensureSchema();
+  const sql = db();
+  const rows = (await sql`
+    select user_id from shops where shop = ${shop}
+  `) as { user_id: string | null }[];
+  return rows.length ? rows[0].user_id : null;
+}
+
 export async function getShopsForUser(
   userId: string,
 ): Promise<{ shop: string; updated_at: string }[]> {
