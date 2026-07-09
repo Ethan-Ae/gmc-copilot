@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { getShopsForUser } from "../../lib/db";
 import { getAuditsForUser, type AuditRow } from "../../lib/audits";
+import ConnectShopify from "./ConnectShopify";
 
 export const runtime = "nodejs";
 
@@ -44,16 +45,16 @@ export default async function DashboardPage() {
       <p className="tech-label text-muted">Connecté : {email}</p>
       <h1 className="mt-2 text-2xl font-semibold text-ink">Tableau de bord</h1>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        <Link
-          href="/api/shopify/auth"
-          className="tech-label rounded bg-brand px-4 py-2 text-surface hover:bg-brand-ink"
-        >
-          Connecter une boutique Shopify
-        </Link>
+      <div className="mt-6 flex flex-col gap-4">
+        <div>
+          <p className="tech-label text-faint">Connecter une boutique Shopify</p>
+          <div className="mt-2">
+            <ConnectShopify />
+          </div>
+        </div>
         <Link
           href="/api/google/auth"
-          className="tech-label rounded border border-line-strong px-4 py-2 text-ink hover:bg-slate-soft"
+          className="tech-label self-start rounded border border-line-strong px-4 py-2 text-ink hover:bg-slate-soft"
         >
           Connecter Google Merchant Center
         </Link>

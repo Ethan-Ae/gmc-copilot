@@ -100,14 +100,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const res = NextResponse.json({
-    google_connected: true,
-    email,
-    sub,
-    got_refresh_token: Boolean(tok.refresh_token),
-    scope: tok.scope,
-    note: "Google OAuth works. Next step: read Merchant Center via the Merchant API.",
-  });
+  // Connection done: hand the merchant back to their dashboard.
+  const res = NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
   res.cookies.delete("google_oauth_state");
   return res;
 }
