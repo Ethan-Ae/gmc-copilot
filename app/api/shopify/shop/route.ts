@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { jsonResponse } from "../../../../lib/apiJson";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../../lib/shopify";
 import { getShopToken } from "../../../../lib/db";
 
@@ -9,12 +10,12 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop")?.trim().toLowerCase();
   if (!shop || !isValidShop(shop)) {
-    return NextResponse.json({ error: "Invalid shop" }, { status: 400 });
+    return jsonResponse({ error: "Invalid shop" }, { status: 400 });
   }
 
   const token = await getShopToken(shop);
   if (!token) {
-    return NextResponse.json(
+    return jsonResponse(
       { connected: false, shop, note: "No token in the database. Install the app first." },
       { status: 404 },
     );
@@ -38,5 +39,5 @@ export async function GET(req: NextRequest) {
   );
   const data = await dataRes.json();
 
-  return NextResponse.json({ connected: true, source: "database", shop, data });
+  return jsonResponse({ connected: true, source: "database", shop, data });
 }

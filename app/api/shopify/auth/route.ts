@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@clerk/nextjs/server";
+import { jsonResponse } from "../../../../lib/apiJson";
 import { getEnv, isValidShop } from "../../../../lib/shopify";
 
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const shop = req.nextUrl.searchParams.get("shop")?.trim().toLowerCase();
   if (!shop || !isValidShop(shop)) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Invalid shop. Use the format your-store.myshopify.com" },
       { status: 400 },
     );

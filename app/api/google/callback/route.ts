@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonResponse } from "../../../../lib/apiJson";
 import { getGoogleEnv } from "../../../../lib/google";
 import { saveGoogleToken } from "../../../../lib/googleStore";
 
@@ -25,13 +26,13 @@ export async function GET(req: NextRequest) {
   const cookieState = req.cookies.get("google_oauth_state")?.value;
 
   if (err) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Google returned an error", detail: err },
       { status: 400 },
     );
   }
   if (!code) {
-    return NextResponse.json({ error: "Missing code" }, { status: 400 });
+    return jsonResponse({ error: "Missing code" }, { status: 400 });
   }
 
   // state = `${randomHex}.${userId}`; randomHex is checked against the cookie
@@ -39,10 +40,10 @@ export async function GET(req: NextRequest) {
   const [randomHex, ...userIdParts] = (state ?? "").split(".");
   const userId = userIdParts.join(".") || null;
   if (!randomHex || !cookieState || randomHex !== cookieState) {
-    return NextResponse.json({ error: "Invalid state" }, { status: 403 });
+    return jsonResponse({ error: "Invalid state" }, { status: 403 });
   }
   if (!userId) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Missing user in state" },
       { status: 403 },
     );
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
 
   if (!tokenRes.ok) {
     const detail = await tokenRes.text();
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Token exchange failed", detail },
       { status: 502 },
     );

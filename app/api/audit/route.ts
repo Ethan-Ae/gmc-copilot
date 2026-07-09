@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@clerk/nextjs/server";
+import { jsonResponse } from "../../../lib/apiJson";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
 import { getShopToken, getShopOwner } from "../../../lib/db";
 import { saveAudit } from "../../../lib/audits";
@@ -127,23 +128,23 @@ const AUDIT_TOOL: Anthropic.Tool = {
 export async function GET(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
 
   const shop = req.nextUrl.searchParams.get("shop")?.trim().toLowerCase();
   if (!shop || !isValidShop(shop)) {
-    return NextResponse.json({ error: "Invalid shop" }, { status: 400 });
+    return jsonResponse({ error: "Invalid shop" }, { status: 400 });
   }
 
   // The shop must belong to the signed-in user before we read or audit it.
   const owner = await getShopOwner(shop);
   if (owner !== userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return jsonResponse({ error: "Forbidden" }, { status: 403 });
   }
 
   const token = await getShopToken(shop);
   if (!token) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "No token in the database. Install the app first." },
       { status: 404 },
     );
@@ -151,7 +152,7 @@ export async function GET(req: NextRequest) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Missing ANTHROPIC_API_KEY env var" },
       { status: 500 },
     );
@@ -244,7 +245,7 @@ export async function GET(req: NextRequest) {
     );
 
     if (!toolBlock) {
-      return NextResponse.json(
+      return jsonResponse(
         { error: "Model did not return structured output", stop_reason: msg.stop_reason },
         { status: 502 },
       );
@@ -259,14 +260,14 @@ export async function GET(req: NextRequest) {
       // persistence must never break returning the audit to the caller
     }
 
-    return NextResponse.json({
+    return jsonResponse({
       shop,
       model,
       truncated: msg.stop_reason === "max_tokens",
       audit: toolBlock.input,
     });
   } catch (err) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Anthropic API call failed", detail: String(err) },
       { status: 502 },
     );

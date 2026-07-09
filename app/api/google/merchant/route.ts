@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { jsonResponse } from "../../../../lib/apiJson";
 import { refreshAccessToken } from "../../../../lib/google";
 import { getGoogleTokenForUser } from "../../../../lib/googleStore";
 
@@ -11,13 +11,13 @@ const BASE = "https://merchantapi.googleapis.com/accounts/v1";
 export async function GET() {
   const { userId } = await auth();
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
 
   // Read only the Google token owned by this user, never another account's.
   const stored = await getGoogleTokenForUser(userId);
   if (!stored) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "No Google account connected. Visit /api/google/auth first." },
       { status: 404 },
     );
@@ -27,7 +27,7 @@ export async function GET() {
   try {
     accessToken = await refreshAccessToken(stored.refresh_token);
   } catch (e) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Token refresh failed", detail: String(e) },
       { status: 502 },
     );
@@ -42,7 +42,7 @@ export async function GET() {
   const accRes = await fetch(`${BASE}/accounts`, { headers });
   const accBody = await accRes.json();
   if (!accRes.ok) {
-    return NextResponse.json(
+    return jsonResponse(
       { step: "accounts.list", status: accRes.status, error: accBody },
       { status: 502 },
     );
@@ -70,7 +70,7 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({
+  return jsonResponse({
     connected_google: stored.email,
     accounts_found: accounts.length,
     results,

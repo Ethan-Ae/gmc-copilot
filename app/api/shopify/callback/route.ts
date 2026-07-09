@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonResponse } from "../../../../lib/apiJson";
 import { getEnv, isValidShop, verifyHmac } from "../../../../lib/shopify";
 import { saveShopToken } from "../../../../lib/db";
 
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   const cookieState = req.cookies.get("shopify_oauth_state")?.value;
 
   if (!shop || !isValidShop(shop) || !code) {
-    return NextResponse.json({ error: "Missing shop or code" }, { status: 400 });
+    return jsonResponse({ error: "Missing shop or code" }, { status: 400 });
   }
 
   // state = `${randomHex}.${userId}`; randomHex is checked against the cookie
@@ -22,16 +23,16 @@ export async function GET(req: NextRequest) {
   const [randomHex, ...userIdParts] = (state ?? "").split(".");
   const userId = userIdParts.join(".") || null;
   if (!randomHex || !cookieState || randomHex !== cookieState) {
-    return NextResponse.json({ error: "Invalid state" }, { status: 403 });
+    return jsonResponse({ error: "Invalid state" }, { status: 403 });
   }
   if (!userId) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: "Missing user in state" },
       { status: 403 },
     );
   }
   if (!verifyHmac(params, apiSecret)) {
-    return NextResponse.json({ error: "Invalid HMAC" }, { status: 403 });
+    return jsonResponse({ error: "Invalid HMAC" }, { status: 403 });
   }
 
   const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
 
   if (!tokenRes.ok) {
     const detail = await tokenRes.text();
-    return NextResponse.json({ error: "Token exchange failed", detail }, { status: 502 });
+    return jsonResponse({ error: "Token exchange failed", detail }, { status: 502 });
   }
 
   const tokenJson = (await tokenRes.json()) as {
