@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { refreshAccessToken } from "../../../../lib/google";
-import { getLatestGoogleToken } from "../../../../lib/googleStore";
+import {
+  getGoogleTokenForUser,
+  getLatestGoogleToken,
+} from "../../../../lib/googleStore";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -8,7 +12,10 @@ export const maxDuration = 30;
 const BASE = "https://merchantapi.googleapis.com/accounts/v1";
 
 export async function GET() {
-  const stored = await getLatestGoogleToken();
+  const { userId } = await auth();
+  const stored = userId
+    ? (await getGoogleTokenForUser(userId)) ?? (await getLatestGoogleToken())
+    : await getLatestGoogleToken();
   if (!stored) {
     return NextResponse.json(
       { error: "No Google account connected. Visit /api/google/auth first." },

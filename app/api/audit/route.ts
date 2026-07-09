@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { auth } from "@clerk/nextjs/server";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
 import { getShopToken } from "../../../lib/db";
+import { saveAudit } from "../../../lib/audits";
 import { GMC_SKILL } from "../../../lib/gmcSkill";
 import { crawlStorefront, type CrawlResult } from "../../../lib/crawl";
 
@@ -235,6 +237,18 @@ export async function GET(req: NextRequest) {
         { error: "Model did not return structured output", stop_reason: msg.stop_reason },
         { status: 502 },
       );
+    }
+
+    const audit = toolBlock.input as { overall?: string };
+
+    // Historise the audit against the signed-in user, when there is one.
+    const { userId } = await auth();
+    if (userId) {
+      try {
+        await saveAudit(userId, shop, audit.overall ?? "unknown", audit);
+      } catch {
+        // persistence must never break returning the audit to the caller
+      }
     }
 
     return NextResponse.json({

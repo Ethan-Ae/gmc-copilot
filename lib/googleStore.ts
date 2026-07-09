@@ -20,6 +20,7 @@ async function ensureSchema(): Promise<void> {
       updated_at timestamptz not null default now()
     )
   `;
+  await sql`alter table google_tokens add column if not exists user_id text`;
   ready = true;
 }
 
@@ -29,17 +30,19 @@ export async function saveGoogleToken(
   refreshToken: string,
   accessToken: string | null,
   expiresAt: string | null,
+  userId: string | null = null,
 ): Promise<void> {
   await ensureSchema();
   const sql = db();
   await sql`
-    insert into google_tokens (sub, email, refresh_token, access_token, expires_at, updated_at)
-    values (${sub}, ${email}, ${refreshToken}, ${accessToken}, ${expiresAt}, now())
+    insert into google_tokens (sub, email, refresh_token, access_token, expires_at, user_id, updated_at)
+    values (${sub}, ${email}, ${refreshToken}, ${accessToken}, ${expiresAt}, ${userId}, now())
     on conflict (sub) do update set
       email = excluded.email,
       refresh_token = excluded.refresh_token,
       access_token = excluded.access_token,
       expires_at = excluded.expires_at,
+      user_id = coalesce(excluded.user_id, google_tokens.user_id),
       updated_at = now()
   `;
 }
@@ -52,6 +55,22 @@ export async function getGoogleToken(
   const rows = (await sql`
     select refresh_token, email from google_tokens where sub = ${sub}
   `) as { refresh_token: string; email: string | null }[];
+  return rows.length ? rows[0] : null;
+}
+
+// Google account linked to a specific Clerk user (most recent if several).
+export async function getGoogleTokenForUser(
+  userId: string,
+): Promise<{ sub: string; email: string | null; refresh_token: string } | null> {
+  await ensureSchema();
+  const sql = db();
+  const rows = (await sql`
+    select sub, email, refresh_token
+    from google_tokens
+    where user_id = ${userId}
+    order by updated_at desc
+    limit 1
+  `) as { sub: string; email: string | null; refresh_token: string }[];
   return rows.length ? rows[0] : null;
 }
 

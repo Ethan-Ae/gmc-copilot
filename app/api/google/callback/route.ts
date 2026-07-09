@@ -33,7 +33,11 @@ export async function GET(req: NextRequest) {
   if (!code) {
     return NextResponse.json({ error: "Missing code" }, { status: 400 });
   }
-  if (!state || !cookieState || state !== cookieState) {
+
+  // state = `${randomHex}.${userId}`; only randomHex is checked against the cookie.
+  const [randomHex, ...userIdParts] = (state ?? "").split(".");
+  const userId = userIdParts.join(".") || null;
+  if (!randomHex || !cookieState || randomHex !== cookieState) {
     return NextResponse.json({ error: "Invalid state" }, { status: 403 });
   }
 
@@ -92,6 +96,7 @@ export async function GET(req: NextRequest) {
       tok.refresh_token,
       tok.access_token ?? null,
       expiresAt,
+      userId,
     );
   }
 

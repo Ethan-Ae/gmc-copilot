@@ -16,7 +16,11 @@ export async function GET(req: NextRequest) {
   if (!shop || !isValidShop(shop) || !code) {
     return NextResponse.json({ error: "Missing shop or code" }, { status: 400 });
   }
-  if (!state || !cookieState || state !== cookieState) {
+
+  // state = `${randomHex}.${userId}`; only randomHex is checked against the cookie.
+  const [randomHex, ...userIdParts] = (state ?? "").split(".");
+  const userId = userIdParts.join(".") || null;
+  if (!randomHex || !cookieState || randomHex !== cookieState) {
     return NextResponse.json({ error: "Invalid state" }, { status: 403 });
   }
   if (!verifyHmac(params, apiSecret)) {
@@ -41,14 +45,11 @@ export async function GET(req: NextRequest) {
   const accessToken = tokenJson.access_token;
 
   // Persist the token so the connection survives without reinstalling
-  await saveShopToken(shop, accessToken, tokenJson.scope ?? null);
+  await saveShopToken(shop, accessToken, tokenJson.scope ?? null, userId);
 
-  // Connection done: hand the merchant off to the audit report.
-  const reportUrl = new URL(
-    `/report?shop=${encodeURIComponent(shop)}`,
-    req.nextUrl.origin,
-  );
-  const res = NextResponse.redirect(reportUrl, { status: 303 });
+  // Connection done: hand the merchant back to their dashboard.
+  const dashboardUrl = new URL("/dashboard", req.nextUrl.origin);
+  const res = NextResponse.redirect(dashboardUrl, { status: 303 });
   res.cookies.delete("shopify_oauth_state");
   return res;
 }
