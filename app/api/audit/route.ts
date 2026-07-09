@@ -4,6 +4,8 @@ import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../lib/apiJson";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
 import { getShopToken, getShopOwner } from "../../../lib/db";
+import { getGoogleTokenForUser } from "../../../lib/googleStore";
+import { getMerchantStatus, type MerchantStatus } from "../../../lib/google";
 import { saveAudit } from "../../../lib/audits";
 import { GMC_SKILL } from "../../../lib/gmcSkill";
 import { crawlStorefront, type CrawlResult } from "../../../lib/crawl";
@@ -54,9 +56,18 @@ Still audit the product data, and report the locked storefront as an issue with
 area "theme" (it blocks a real GMC crawl), noting that policies and storefront
 claims could not be verified.
 
-Write the summary, problem, and fix fields in FRENCH. Keep overall, area, and
-severity as the English codes defined by the tool. In any text you write, do not
-use long dashes; use "-". Keep each issue concise.
+You may also be given a section "STATUT MERCHANT CENTER REEL" holding the live
+Merchant Center status (account issues and product issues) for this merchant.
+When it is present, compare the risks you detect on the site with the active
+account issues, and set each issue "source": "gmc_confirmed" when it matches an
+active Merchant Center issue, "both" when you see it both on the site and in
+Merchant Center, and "site" when it is only detected from the storefront or
+product data. When that section says no Merchant Center status is available,
+set "source": "site" on every issue.
+
+Write the summary, problem, and fix fields in FRENCH. Keep overall, area,
+severity, and source as the English codes defined by the tool. In any text you
+write, do not use long dashes; use "-". Keep each issue concise.
 
 Report your findings by calling the report_audit tool.
 </role>`;
@@ -102,6 +113,12 @@ const AUDIT_TOOL: Anthropic.Tool = {
               description: "Product title, or null if store-wide.",
             },
             severity: { type: "string", enum: ["high", "medium", "low"] },
+            source: {
+              type: "string",
+              enum: ["site", "gmc_confirmed", "both"],
+              description:
+                "Origin of the issue: 'site' if only detected on the storefront/product data, 'gmc_confirmed' if it matches an active Merchant Center account issue, 'both' if seen in both. Use 'site' when no real Merchant Center status was provided.",
+            },
             problem: {
               type: "string",
               description:
@@ -112,7 +129,7 @@ const AUDIT_TOOL: Anthropic.Tool = {
               description: "Concrete, verifiable correction, written in French.",
             },
           },
-          required: ["area", "severity", "problem", "fix"],
+          required: ["area", "severity", "source", "problem", "fix"],
         },
       },
       checked: {
@@ -209,6 +226,18 @@ export async function GET(req: NextRequest) {
     crawl = { locked: false, pages: [] };
   }
 
+  // Real Merchant Center status for the signed-in user, when a Google account is
+  // connected. Any failure (no token, API error) must not block the audit.
+  let gmcStatus: MerchantStatus | null = null;
+  try {
+    const googleTok = await getGoogleTokenForUser(userId);
+    if (googleTok) {
+      gmcStatus = await getMerchantStatus(googleTok.refresh_token);
+    }
+  } catch {
+    gmcStatus = null;
+  }
+
   const anthropic = new Anthropic({ apiKey });
   const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
 
@@ -234,6 +263,14 @@ export async function GET(req: NextRequest) {
                 'Report a locked storefront (area "theme") and still audit the ' +
                 "product data."
               : "") +
+            "\n\nSTATUT MERCHANT CENTER REEL:\n" +
+            (gmcStatus
+              ? JSON.stringify(gmcStatus) +
+                "\n\nCompare les risques detectes sur le site avec les account " +
+                "issues actives ci-dessus. Marque chaque issue du rapport avec " +
+                'le champ "source" ("site", "gmc_confirmed" ou "both").'
+              : "Aucun compte Google Merchant Center connecte pour ce marchand. " +
+                'Mets "source": "site" sur chaque issue.') +
             "\n\nWrite the summary, problem, and fix fields in French. " +
             "Call report_audit with your findings.",
         },

@@ -20,10 +20,13 @@ type Area =
   | "theme"
   | "needs-verification";
 
+type IssueSource = "site" | "gmc_confirmed" | "both";
+
 interface Issue {
   area: Area;
   product: string | null;
   severity: Severity;
+  source?: IssueSource;
   problem: string;
   fix: string;
 }
@@ -77,6 +80,21 @@ const SEVERITY: Record<Severity, { label: string; chip: string }> = {
   high: { label: "Critique", chip: "bg-nogo-soft text-nogo" },
   medium: { label: "Moyen", chip: "bg-warn-soft text-warn" },
   low: { label: "Mineur", chip: "bg-slate-soft text-slate" },
+};
+
+const SOURCE: Record<IssueSource, { label: string; chip: string }> = {
+  site: {
+    label: "Risque detecte (non confirme)",
+    chip: "bg-warn-soft text-warn",
+  },
+  gmc_confirmed: {
+    label: "Confirme par Google",
+    chip: "bg-nogo-soft text-nogo",
+  },
+  both: {
+    label: "Confirme par Google",
+    chip: "bg-nogo-soft text-nogo",
+  },
 };
 
 const AREA_LABEL: Record<Area, string> = {
@@ -359,6 +377,13 @@ function IssueCard({ issue }: { issue: Issue }) {
         <span className="tech-label rounded px-2 py-1 bg-slate-soft text-slate">
           {AREA_LABEL[issue.area] ?? issue.area}
         </span>
+        {issue.source && SOURCE[issue.source] && (
+          <span
+            className={`tech-label rounded px-2 py-1 ${SOURCE[issue.source].chip}`}
+          >
+            {SOURCE[issue.source].label}
+          </span>
+        )}
         {issue.product && (
           <span className="font-mono text-xs text-muted truncate">
             {issue.product}
