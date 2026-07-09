@@ -79,12 +79,12 @@ export default async function DashboardPage() {
                     Mise à jour {formatDate(s.updated_at)}
                   </p>
                 </div>
-                <Link
-                  href={`/report?shop=${encodeURIComponent(s.shop)}`}
+                <a
+                  href={`/report?shop=${encodeURIComponent(s.shop.trim())}`}
                   className="tech-label rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
                 >
                   Auditer
-                </Link>
+                </a>
               </li>
             ))}
           </ul>
