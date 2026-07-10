@@ -15,10 +15,16 @@ export type Patch = {
   fixType?: string;
   field?: string | null;
   targetId?: string | null;
+  targetHandle?: string | null;
   currentValue?: string;
   newValue?: string;
   autoApplicable?: boolean;
 };
+
+// A Shopify Admin GID, e.g. gid://shopify/Product/123.
+function isGid(s: unknown): s is string {
+  return typeof s === "string" && /^gid:\/\/shopify\/\w+\/\d+/.test(s);
+}
 
 export type Mode = "preview" | "apply";
 
@@ -83,14 +89,52 @@ export async function resolveTarget(
 
 // product_seo: the exact field to write is given by patch.field. targetId is the
 // product gid.
+type SeoProduct = {
+  id: string;
+  descriptionHtml: string;
+  seo: { title: string | null; description: string | null };
+};
+
+// Resolve the product either by its GID or, as a fallback, by its handle.
+async function fetchSeoProduct(
+  shop: string,
+  token: string,
+  patch: Patch,
+): Promise<SeoProduct | null | ResolveError> {
+  if (isGid(patch.targetId)) {
+    const data = await shopifyGraphQL<{ product: SeoProduct | null }>(
+      shop,
+      token,
+      `query($id: ID!) {
+        product(id: $id) { id descriptionHtml seo { title description } }
+      }`,
+      { id: patch.targetId },
+    );
+    return data.product;
+  }
+  if (patch.targetHandle) {
+    const data = await shopifyGraphQL<{
+      products: { edges: { node: SeoProduct }[] };
+    }>(
+      shop,
+      token,
+      `query($q: String!) {
+        products(first: 1, query: $q) {
+          edges { node { id descriptionHtml seo { title description } } }
+        }
+      }`,
+      { q: `handle:${patch.targetHandle}` },
+    );
+    return data.products?.edges?.[0]?.node ?? null;
+  }
+  return { error: "missing_target_id", status: 400 };
+}
+
 async function resolveProductSeo(
   shop: string,
   token: string,
   patch: Patch,
 ): Promise<Target | ResolveError> {
-  const id = patch.targetId;
-  if (!id) return { error: "missing_target_id", status: 400 };
-
   const field = patch.field ?? "";
   const seoField =
     field === "seo_description"
@@ -102,26 +146,9 @@ async function resolveProductSeo(
           : null;
   if (!seoField) return { error: "invalid_field", status: 400 };
 
-  const data = await shopifyGraphQL<{
-    product: {
-      id: string;
-      descriptionHtml: string;
-      seo: { title: string | null; description: string | null };
-    } | null;
-  }>(
-    shop,
-    token,
-    `query($id: ID!) {
-      product(id: $id) {
-        id
-        descriptionHtml
-        seo { title description }
-      }
-    }`,
-    { id },
-  );
-
-  const product = data.product;
+  const resolved = await fetchSeoProduct(shop, token, patch);
+  if (resolved && "error" in resolved) return resolved;
+  const product = resolved;
   if (!product) return { error: "target_not_found", status: 404 };
 
   const currentLive: string | null =
@@ -160,34 +187,87 @@ async function resolveProductSeo(
 
 // product_compare_at: targetId is a variant gid. The bulk price mutation also
 // needs the parent product id, so we read it from the variant.
+type CompareAtVariant = {
+  id: string;
+  compareAtPrice: string | null;
+  product: { id: string };
+};
+
+// Resolve the variant either by its GID or, as a fallback, by the product
+// handle. When resolving by handle, only a single-variant product is
+// unambiguous; several variants -> "variant_ambiguous".
+async function fetchCompareAtVariant(
+  shop: string,
+  token: string,
+  patch: Patch,
+): Promise<CompareAtVariant | null | ResolveError> {
+  if (isGid(patch.targetId)) {
+    const data = await shopifyGraphQL<{
+      productVariant: CompareAtVariant | null;
+    }>(
+      shop,
+      token,
+      `query($id: ID!) {
+        productVariant(id: $id) {
+          id compareAtPrice product { id }
+        }
+      }`,
+      { id: patch.targetId },
+    );
+    return data.productVariant;
+  }
+  if (patch.targetHandle) {
+    const data = await shopifyGraphQL<{
+      products: {
+        edges: {
+          node: {
+            id: string;
+            variants: {
+              edges: { node: { id: string; compareAtPrice: string | null } }[];
+            };
+          };
+        }[];
+      };
+    }>(
+      shop,
+      token,
+      `query($q: String!) {
+        products(first: 1, query: $q) {
+          edges {
+            node {
+              id
+              variants(first: 100) {
+                edges { node { id compareAtPrice } }
+              }
+            }
+          }
+        }
+      }`,
+      { q: `handle:${patch.targetHandle}` },
+    );
+    const node = data.products?.edges?.[0]?.node;
+    if (!node) return null;
+    const variants = node.variants?.edges ?? [];
+    if (variants.length === 0) return null;
+    if (variants.length > 1) return { error: "variant_ambiguous", status: 409 };
+    const v = variants[0].node;
+    return {
+      id: v.id,
+      compareAtPrice: v.compareAtPrice,
+      product: { id: node.id },
+    };
+  }
+  return { error: "missing_target_id", status: 400 };
+}
+
 async function resolveCompareAt(
   shop: string,
   token: string,
   patch: Patch,
 ): Promise<Target | ResolveError> {
-  const id = patch.targetId;
-  if (!id) return { error: "missing_target_id", status: 400 };
-
-  const data = await shopifyGraphQL<{
-    productVariant: {
-      id: string;
-      compareAtPrice: string | null;
-      product: { id: string };
-    } | null;
-  }>(
-    shop,
-    token,
-    `query($id: ID!) {
-      productVariant(id: $id) {
-        id
-        compareAtPrice
-        product { id }
-      }
-    }`,
-    { id },
-  );
-
-  const variant = data.productVariant;
+  const resolved = await fetchCompareAtVariant(shop, token, patch);
+  if (resolved && "error" in resolved) return resolved;
+  const variant = resolved;
   if (!variant) return { error: "target_not_found", status: 404 };
 
   return {

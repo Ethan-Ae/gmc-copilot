@@ -26,6 +26,7 @@ interface FixPatch {
   fixType: string;
   field?: string | null;
   targetId?: string | null;
+  targetHandle?: string | null;
   currentValue?: string;
   newValue?: string;
   autoApplicable?: boolean;

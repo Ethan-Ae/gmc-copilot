@@ -76,16 +76,27 @@ exact replacement:
   "product_seo" -> "seo_description", "seo_title" or "descriptionHtml";
   "product_compare_at" -> "compareAtPrice"; "policy" -> "policy_body". Leave
   "field" null for "page", "theme", "business_identity" and "manual_only".
-- Set "targetId" to the product or variant id for product_* fixes, to a policy
-  type such as "REFUND_POLICY" for policy fixes, or null otherwise.
-- "currentValue" is the exact wrong value; "newValue" is the exact replacement.
+- Set "targetId" to the EXACT Shopify GID copied character for character from
+  the "PRODUCT & VARIANT ID INDEX" section, never invented:
+  * "product_seo" and "descriptionHtml" -> the product id (gid://shopify/Product/..).
+  * "product_compare_at" -> the id of the SPECIFIC variant concerned
+    (gid://shopify/ProductVariant/..), not the product id.
+  * "policy" -> the policy type such as "REFUND_POLICY".
+- Set "targetHandle" to the product handle copied verbatim from the ID INDEX for
+  product_* fixes (fallback for the server), null otherwise.
+- "currentValue" is the exact wrong value. "newValue" MUST contain the exact
+  final text to write (e.g. the fully rewritten description, the exact new
+  compare-at price), NEVER an instruction like "reformuler" or "corriger".
 - Set "autoApplicable": true ONLY for "product_seo", "product_compare_at" and
   "policy", where "newValue" is a safe literal value ready to be written back.
   For "theme", "business_identity", "page" and "manual_only" set
   "autoApplicable": false; there "newValue" may be a written instruction.
 - Apply the zero-invention rule to "newValue": never introduce a price, delay,
   review, guarantee or any fact that is not already proven in the data you were
-  given. If you cannot propose a safe replacement, omit "patch" (leave it null).
+  given.
+- If you cannot identify the id with certainty, set the whole "patch" to null.
+  Never emit a half-filled patch; a patch with a missing or guessed targetId is
+  worse than no patch at all.
 
 Write the summary, problem, and fix fields in FRENCH. Keep overall, area,
 severity, source, and every "patch" enum/id/value as the English codes and raw
@@ -186,7 +197,12 @@ const AUDIT_TOOL: Anthropic.Tool = {
                 targetId: {
                   type: ["string", "null"],
                   description:
-                    "Identifier of the target: product or variant id for product_* fixes, a policy type such as 'REFUND_POLICY' for policy fixes, or null when not applicable.",
+                    "The EXACT Shopify GID copied character for character from the ID INDEX, never invented. For product_seo/descriptionHtml it is the product id (gid://shopify/Product/...). For product_compare_at it is the id of the specific VARIANTE concerned (gid://shopify/ProductVariant/...). For policy it is the policy type such as 'REFUND_POLICY'. If you cannot identify the id with certainty, set the whole patch to null.",
+                },
+                targetHandle: {
+                  type: ["string", "null"],
+                  description:
+                    "Optional product handle copied verbatim from the ID INDEX. Provide it for product_* fixes as a fallback when the server needs to re-resolve the id. Null otherwise.",
                 },
                 currentValue: {
                   type: "string",
@@ -264,6 +280,7 @@ export async function GET(req: NextRequest) {
     products(first: 20) {
       edges {
         node {
+          id
           title
           handle
           status
@@ -274,7 +291,9 @@ export async function GET(req: NextRequest) {
           totalInventory
           featuredImage { url altText }
           variants(first: 5) {
-            edges { node { title price compareAtPrice availableForSale sku } }
+            edges {
+              node { id title price compareAtPrice availableForSale sku }
+            }
           }
         }
       }
@@ -295,11 +314,46 @@ export async function GET(req: NextRequest) {
   const shopData = await shopRes.json();
 
   // Product handles from the Admin API feed the storefront product crawl.
-  type ProductEdge = { node?: { handle?: string } };
+  type VariantNode = {
+    id?: string;
+    title?: string;
+    price?: string;
+    compareAtPrice?: string | null;
+  };
+  type ProductNode = {
+    id?: string;
+    handle?: string;
+    title?: string;
+    variants?: { edges?: { node?: VariantNode }[] };
+  };
+  type ProductEdge = { node?: ProductNode };
   const productEdges: ProductEdge[] = shopData?.data?.products?.edges ?? [];
   const handles = productEdges
     .map((e) => e?.node?.handle)
     .filter((h): h is string => typeof h === "string" && h.length > 0);
+
+  // A compact, clearly labelled index of the real Shopify GIDs so the model can
+  // copy targetId/targetHandle verbatim into each patch (never invent an id).
+  const idIndex = productEdges
+    .map((e) => e?.node)
+    .filter((n): n is ProductNode => Boolean(n && n.id))
+    .map((n) => {
+      const variants = (n.variants?.edges ?? [])
+        .map((v) => v?.node)
+        .filter((v): v is VariantNode => Boolean(v && v.id))
+        .map(
+          (v) =>
+            `  VARIANTE id="${v.id}" title=${JSON.stringify(v.title ?? "")} ` +
+            `price=${JSON.stringify(v.price ?? "")} ` +
+            `compareAtPrice=${JSON.stringify(v.compareAtPrice ?? null)}`,
+        )
+        .join("\n");
+      const head =
+        `PRODUIT id="${n.id}" handle=${JSON.stringify(n.handle ?? "")} ` +
+        `title=${JSON.stringify(n.title ?? "")}`;
+      return variants ? `${head}\n${variants}` : head;
+    })
+    .join("\n");
 
   // Crawl the public storefront (home, policies, pages, products). A crawl
   // failure must not break the audit, so degrade to an empty result.
@@ -339,6 +393,9 @@ export async function GET(req: NextRequest) {
             "Here is the Shopify store snapshot to audit.\n\n" +
             "1) PRODUCT DATA (JSON):\n" +
             JSON.stringify(shopData?.data ?? shopData) +
+            "\n\n1b) PRODUCT & VARIANT ID INDEX (copy these ids verbatim into " +
+            "patch.targetId / patch.targetHandle, never invent them):\n" +
+            (idIndex || "(no product returned)") +
             "\n\n2) PUBLIC STOREFRONT CONTENT (JSON):\n" +
             JSON.stringify(crawl) +
             (crawl.locked
