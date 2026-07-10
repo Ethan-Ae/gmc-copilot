@@ -65,9 +65,28 @@ Merchant Center, and "site" when it is only detected from the storefront or
 product data. When that section says no Merchant Center status is available,
 set "source": "site" on every issue.
 
+For every issue that can be corrected, also fill the "patch" object with the
+exact replacement:
+- Choose "fixType": "product_seo" for a product title/description/SEO rewrite,
+  "product_compare_at" for a suspicious compare-at price, "policy" for a store
+  policy page, "page" for other storefront pages (about, contact...), "theme"
+  for theme/layout problems, "business_identity" for legal/business identity,
+  and "manual_only" when the merchant must act by hand.
+- Set "targetId" to the product or variant id for product_* fixes, to a policy
+  type such as "REFUND_POLICY" for policy fixes, or null otherwise.
+- "currentValue" is the exact wrong value; "newValue" is the exact replacement.
+- Set "autoApplicable": true ONLY for "product_seo", "product_compare_at" and
+  "policy", where "newValue" is a safe literal value ready to be written back.
+  For "theme", "business_identity", "page" and "manual_only" set
+  "autoApplicable": false; there "newValue" may be a written instruction.
+- Apply the zero-invention rule to "newValue": never introduce a price, delay,
+  review, guarantee or any fact that is not already proven in the data you were
+  given. If you cannot propose a safe replacement, omit "patch" (leave it null).
+
 Write the summary, problem, and fix fields in FRENCH. Keep overall, area,
-severity, and source as the English codes defined by the tool. In any text you
-write, do not use long dashes; use "-". Keep each issue concise.
+severity, source, and every "patch" enum/id/value as the English codes and raw
+values defined by the tool. In any text you write, do not use long dashes; use
+"-". Keep each issue concise.
 
 Report your findings by calling the report_audit tool.
 </role>`;
@@ -127,6 +146,54 @@ const AUDIT_TOOL: Anthropic.Tool = {
             fix: {
               type: "string",
               description: "Concrete, verifiable correction, written in French.",
+            },
+            patch: {
+              type: ["object", "null"],
+              description:
+                "Optional structured correction for this issue. Fill it only when a concrete replacement can be proposed. Omit or set null when nothing can be auto-prepared.",
+              properties: {
+                fixType: {
+                  type: "string",
+                  enum: [
+                    "product_seo",
+                    "product_compare_at",
+                    "policy",
+                    "page",
+                    "theme",
+                    "business_identity",
+                    "manual_only",
+                  ],
+                  description:
+                    "Kind of correction. product_seo/product_compare_at target Shopify product data, policy targets a store policy page, page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
+                },
+                targetId: {
+                  type: ["string", "null"],
+                  description:
+                    "Identifier of the target: product or variant id for product_* fixes, a policy type such as 'REFUND_POLICY' for policy fixes, or null when not applicable.",
+                },
+                currentValue: {
+                  type: "string",
+                  description:
+                    "The exact current value that is wrong (title, description, compare-at price, policy text excerpt, etc.).",
+                },
+                newValue: {
+                  type: "string",
+                  description:
+                    "The exact proposed replacement for product_seo/product_compare_at/policy. For theme/business_identity/page/manual_only it may be a written instruction instead of a literal value. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data.",
+                },
+                autoApplicable: {
+                  type: "boolean",
+                  description:
+                    "true ONLY for product_seo, product_compare_at and policy, where newValue is a safe literal replacement. Always false for page, theme, business_identity and manual_only.",
+                },
+              },
+              required: [
+                "fixType",
+                "targetId",
+                "currentValue",
+                "newValue",
+                "autoApplicable",
+              ],
             },
           },
           required: ["area", "severity", "source", "problem", "fix"],
