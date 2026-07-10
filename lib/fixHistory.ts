@@ -74,6 +74,33 @@ export type FixRow = {
   reverted_at: string | null;
 };
 
+// A single fix row scoped to its owner (null if not found or not owned).
+export async function getFixById(
+  id: string,
+  userId: string,
+): Promise<FixRow | null> {
+  await ensureSchema();
+  const sql = db();
+  const rows = (await sql`
+    select id, user_id, shop, audit_id, fix_type, field,
+           target_id, previous_value, new_value, applied_at, reverted_at
+    from fix_history
+    where id = ${id} and user_id = ${userId}
+  `) as FixRow[];
+  return rows.length ? rows[0] : null;
+}
+
+// Stamp a fix as reverted so the UI stops offering the undo.
+export async function markReverted(id: string, userId: string): Promise<void> {
+  await ensureSchema();
+  const sql = db();
+  await sql`
+    update fix_history
+    set reverted_at = now()
+    where id = ${id} and user_id = ${userId}
+  `;
+}
+
 // Most recent applied corrections for a user, newest first.
 export async function getFixHistoryForUser(userId: string): Promise<FixRow[]> {
   await ensureSchema();

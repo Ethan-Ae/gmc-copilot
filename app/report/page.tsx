@@ -22,6 +22,15 @@ type Area =
 
 type IssueSource = "site" | "gmc_confirmed" | "both";
 
+interface FixPatch {
+  fixType: string;
+  field?: string | null;
+  targetId?: string | null;
+  currentValue?: string;
+  newValue?: string;
+  autoApplicable?: boolean;
+}
+
 interface Issue {
   area: Area;
   product: string | null;
@@ -29,6 +38,7 @@ interface Issue {
   source?: IssueSource;
   problem: string;
   fix: string;
+  patch?: FixPatch;
 }
 
 interface Audit {
@@ -335,7 +345,7 @@ function ResultView({
         ) : (
           <ul className="space-y-4">
             {issues.map((issue, i) => (
-              <IssueCard key={i} issue={issue} />
+              <IssueCard key={i} issue={issue} shop={data.shop} />
             ))}
           </ul>
         )}
@@ -366,7 +376,7 @@ function ResultView({
   );
 }
 
-function IssueCard({ issue }: { issue: Issue }) {
+function IssueCard({ issue, shop }: { issue: Issue; shop: string }) {
   const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
   return (
     <li className="bg-surface border border-line rounded-lg p-5">
@@ -395,7 +405,194 @@ function IssueCard({ issue }: { issue: Issue }) {
         <p className="tech-label text-brand mb-1">Correctif</p>
         <p className="text-ink leading-relaxed">{issue.fix}</p>
       </div>
+      {issue.patch?.autoApplicable && (
+        <FixActions shop={shop} patch={issue.patch} />
+      )}
     </li>
+  );
+}
+
+// Local, per-issue fix workflow: preview (read-only), apply (write), then undo.
+// All state lives in useState here; nothing is persisted to the browser.
+type PreviewResult = {
+  kind: "preview";
+  currentLive: string | null;
+  newValue: string;
+  drift: boolean;
+};
+type AppliedResult = { kind: "applied"; fixId: string; newValue: string };
+type DriftResult = { kind: "drift"; currentLive: string | null };
+type ErrorResult = { kind: "error"; message: string };
+type RevertedResult = { kind: "reverted" };
+type FixResult =
+  | PreviewResult
+  | AppliedResult
+  | DriftResult
+  | ErrorResult
+  | RevertedResult;
+
+function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
+  const [busy, setBusy] = useState<null | "preview" | "apply" | "revert">(null);
+  const [result, setResult] = useState<FixResult | null>(null);
+
+  const userErrorsText = (body: unknown): string => {
+    const errs = (body as { userErrors?: { message: string }[] })?.userErrors;
+    if (errs?.length) return errs.map((e) => e.message).join(" ");
+    const detail = (body as { detail?: string; error?: string })?.detail;
+    const error = (body as { error?: string })?.error;
+    return detail || error || "Une erreur est survenue.";
+  };
+
+  const preview = async () => {
+    setBusy("preview");
+    try {
+      const res = await fetch("/api/fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shop, patch, mode: "preview" }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setResult({ kind: "error", message: userErrorsText(body) });
+        return;
+      }
+      setResult({
+        kind: "preview",
+        currentLive: body.currentLive ?? null,
+        newValue: body.newValue ?? patch.newValue ?? "",
+        drift: Boolean(body.drift),
+      });
+    } catch {
+      setResult({ kind: "error", message: "Le serveur est injoignable." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const apply = async () => {
+    setBusy("apply");
+    try {
+      const res = await fetch("/api/fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shop, patch, mode: "apply" }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok && body?.status === "applied") {
+        setResult({
+          kind: "applied",
+          fixId: body.fixId,
+          newValue: body.newValue ?? patch.newValue ?? "",
+        });
+        return;
+      }
+      if (body?.status === "drift") {
+        setResult({ kind: "drift", currentLive: body.currentLive ?? null });
+        return;
+      }
+      setResult({ kind: "error", message: userErrorsText(body) });
+    } catch {
+      setResult({ kind: "error", message: "Le serveur est injoignable." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const revert = async (fixId: string) => {
+    setBusy("revert");
+    try {
+      const res = await fetch("/api/fix/revert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fixHistoryId: fixId }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok && body?.status === "reverted") {
+        setResult({ kind: "reverted" });
+        return;
+      }
+      if (body?.status === "drift") {
+        setResult({ kind: "drift", currentLive: body.currentLive ?? null });
+        return;
+      }
+      setResult({ kind: "error", message: userErrorsText(body) });
+    } catch {
+      setResult({ kind: "error", message: "Le serveur est injoignable." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const applied = result?.kind === "applied" ? result : null;
+
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {!applied && result?.kind !== "reverted" && (
+          <>
+            <button
+              onClick={preview}
+              disabled={busy !== null}
+              className="border border-line-strong hover:border-brand hover:text-brand text-ink font-medium rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+            >
+              {busy === "preview" ? "Chargement..." : "Previsualiser"}
+            </button>
+            <button
+              onClick={apply}
+              disabled={busy !== null}
+              className="bg-brand text-paper hover:bg-brand/90 font-medium rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+            >
+              {busy === "apply" ? "Application..." : "Appliquer"}
+            </button>
+          </>
+        )}
+        {applied && (
+          <button
+            onClick={() => revert(applied.fixId)}
+            disabled={busy !== null}
+            className="border border-line-strong hover:border-nogo hover:text-nogo text-ink font-medium rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+          >
+            {busy === "revert" ? "Annulation..." : "Annuler"}
+          </button>
+        )}
+      </div>
+
+      {result?.kind === "preview" && (
+        <div className="mt-3 text-sm space-y-1">
+          <p className="text-muted">
+            <span className="tech-label text-faint">Actuel</span> :{" "}
+            <span className="text-ink">{result.currentLive || "(vide)"}</span>
+          </p>
+          <p className="text-muted">
+            <span className="tech-label text-faint">Propose</span> :{" "}
+            <span className="text-ink">{result.newValue || "(vide)"}</span>
+          </p>
+          {result.drift && (
+            <p className="text-warn font-medium">
+              Modifie depuis l&apos;audit
+            </p>
+          )}
+        </div>
+      )}
+
+      {result?.kind === "applied" && (
+        <p className="mt-3 text-sm text-go font-medium">Applique</p>
+      )}
+
+      {result?.kind === "reverted" && (
+        <p className="mt-3 text-sm text-muted">Correction annulee.</p>
+      )}
+
+      {result?.kind === "drift" && (
+        <p className="mt-3 text-sm text-warn font-medium">
+          Modifie depuis l&apos;audit - non ecrit.
+        </p>
+      )}
+
+      {result?.kind === "error" && (
+        <p className="mt-3 text-sm text-nogo">{result.message}</p>
+      )}
+    </div>
   );
 }
 
