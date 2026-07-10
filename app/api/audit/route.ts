@@ -72,6 +72,10 @@ exact replacement:
   policy page, "page" for other storefront pages (about, contact...), "theme"
   for theme/layout problems, "business_identity" for legal/business identity,
   and "manual_only" when the merchant must act by hand.
+- Set "field" to the exact field written, consistent with "fixType":
+  "product_seo" -> "seo_description", "seo_title" or "descriptionHtml";
+  "product_compare_at" -> "compareAtPrice"; "policy" -> "policy_body". Leave
+  "field" null for "page", "theme", "business_identity" and "manual_only".
 - Set "targetId" to the product or variant id for product_* fixes, to a policy
   type such as "REFUND_POLICY" for policy fixes, or null otherwise.
 - "currentValue" is the exact wrong value; "newValue" is the exact replacement.
@@ -165,6 +169,19 @@ const AUDIT_TOOL: Anthropic.Tool = {
                   ],
                   description:
                     "Kind of correction. product_seo/product_compare_at target Shopify product data, policy targets a store policy page, page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
+                },
+                field: {
+                  type: ["string", "null"],
+                  enum: [
+                    "seo_description",
+                    "seo_title",
+                    "descriptionHtml",
+                    "compareAtPrice",
+                    "policy_body",
+                    null,
+                  ],
+                  description:
+                    "Exact field to write, consistent with fixType. product_seo -> 'seo_description', 'seo_title' or 'descriptionHtml'; product_compare_at -> 'compareAtPrice'; policy -> 'policy_body'. Leave null for non auto-applicable fixTypes.",
                 },
                 targetId: {
                   type: ["string", "null"],
