@@ -73,18 +73,3 @@ export async function getGoogleTokenForUser(
   `) as { sub: string; email: string | null; refresh_token: string }[];
   return rows.length ? rows[0] : null;
 }
-
-// Most recently connected Google account (used while there is no user/account model yet)
-export async function getLatestGoogleToken(): Promise<
-  { sub: string; email: string | null; refresh_token: string } | null
-> {
-  await ensureSchema();
-  const sql = db();
-  const rows = (await sql`
-    select sub, email, refresh_token
-    from google_tokens
-    order by updated_at desc
-    limit 1
-  `) as { sub: string; email: string | null; refresh_token: string }[];
-  return rows.length ? rows[0] : null;
-}

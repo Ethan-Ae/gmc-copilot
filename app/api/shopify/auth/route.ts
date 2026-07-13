@@ -34,18 +34,6 @@ export async function GET(req: NextRequest) {
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&state=${encodeURIComponent(state)}`;
 
-  // Non-destructive debug: inspect the exact authorize URL/params without
-  // redirecting to Shopify. Does not set the state cookie or start OAuth.
-  if (req.nextUrl.searchParams.get("debug") === "1") {
-    return jsonResponse({
-      authorizeUrl: authUrl,
-      scope: scopes,
-      clientId: apiKey,
-      redirectUri,
-      shop,
-    });
-  }
-
   const res = NextResponse.redirect(authUrl);
   res.cookies.set("shopify_oauth_state", randomHex, {
     httpOnly: true,

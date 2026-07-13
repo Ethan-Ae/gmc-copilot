@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../lib/apiJson";
 import { refreshAccessToken } from "../../../../lib/google";
-import { getLatestGoogleToken } from "../../../../lib/googleStore";
+import { getGoogleTokenForUser } from "../../../../lib/googleStore";
 
 export const runtime = "nodejs";
 
@@ -9,6 +10,11 @@ export const runtime = "nodejs";
 // account the connected Google user administers. Unlocks all Merchant API calls
 // from this project. Usage: /api/google/register?accountId=<numeric MC id>
 export async function GET(req: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return jsonResponse({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const accountId = req.nextUrl.searchParams.get("accountId")?.trim();
   if (!accountId || !/^\d+$/.test(accountId)) {
     return jsonResponse(
@@ -20,7 +26,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const stored = await getLatestGoogleToken();
+  // Read only the Google token owned by this user, never another account's.
+  const stored = await getGoogleTokenForUser(userId);
   if (!stored) {
     return jsonResponse(
       { error: "No Google account connected. Visit /api/google/auth first." },
