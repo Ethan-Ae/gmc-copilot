@@ -264,7 +264,6 @@ function NoticeView({
 function TeaserResult({ data }: { data: TeaserResponse }) {
   const verdict = data.overall ? VERDICT[data.overall] : VERDICT.warning;
   const teased = data.teaserIssues ?? [];
-  const remaining = Math.max(data.issueCount - teased.length, 0);
 
   return (
     <div className="rise space-y-6">
@@ -297,7 +296,7 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
         </div>
       </div>
 
-      {/* Teased issues (max 3, no detailed fix) */}
+      {/* Teased issues (max 2, no detailed fix) */}
       <ul className="space-y-4">
         {teased.map((issue, i) => {
           const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
@@ -320,14 +319,22 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
         })}
       </ul>
 
-      <Paywall remaining={remaining} />
+      <Upsell issueCount={data.issueCount} />
     </div>
   );
 }
 
-// Visual paywall: a blurred, unreadable stack that signals there is more (the
-// remaining issues + the detailed fixes), topped by the upgrade CTA.
-function Paywall({ remaining }: { remaining: number }) {
+// Adaptive upsell below the teasers. When several problems remain, a blurred
+// locked block creates the urge to unlock. When the store is already in good
+// shape, drop the anxiety-inducing blur for a reassuring block instead.
+function Upsell({ issueCount }: { issueCount: number }) {
+  if (issueCount >= 3) return <LockedPaywall remaining={issueCount - 2} />;
+  return <PositiveUpsell issueCount={issueCount} />;
+}
+
+// Blurred, unreadable stack signalling there is more (the remaining issues and
+// the detailed fixes), topped by the upgrade CTA.
+function LockedPaywall({ remaining }: { remaining: number }) {
   return (
     <div className="relative overflow-hidden rounded-lg border border-line-strong">
       {/* Blurred, non-interactive teaser of the locked content */}
@@ -367,11 +374,9 @@ function Paywall({ remaining }: { remaining: number }) {
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center bg-paper/70 backdrop-blur-[2px] px-5">
         <p className="tech-label text-brand mb-2">Rapport complet verrouille</p>
         <h3 className="text-xl font-semibold tracking-tight max-w-md">
-          {remaining > 0
-            ? `${remaining} autre${remaining > 1 ? "s" : ""} probleme${
-                remaining > 1 ? "s" : ""
-              } et tous les correctifs detailles restent a decouvrir.`
-            : "Les correctifs detailles et l'application en 1 clic restent a decouvrir."}
+          {`Il reste ${remaining} probleme${
+            remaining > 1 ? "s" : ""
+          } et tous les correctifs detailles restent a decouvrir.`}
         </h3>
         <p className="mt-3 text-muted max-w-md leading-relaxed">
           Debloque le rapport complet, les correctifs prets a appliquer et le
@@ -384,6 +389,34 @@ function Paywall({ remaining }: { remaining: number }) {
           Voir le rapport complet et corriger &rarr; Tarifs
         </Link>
       </div>
+    </div>
+  );
+}
+
+// Reassuring block for a store already in good shape (<= 2 problems). No blur:
+// the message is that a full audit confirms there is nothing blocking left.
+function PositiveUpsell({ issueCount }: { issueCount: number }) {
+  const body =
+    issueCount === 0
+      ? "Aucun probleme detecte sur les pages publiques. Un audit complet verifie aussi tes donnees produit et ton statut Merchant Center."
+      : `On a repere ${issueCount} point${
+          issueCount > 1 ? "s" : ""
+        } mineur${
+          issueCount > 1 ? "s" : ""
+        }. Un audit complet confirme qu'aucun blocage ne reste avant ta review GMC.`;
+  return (
+    <div className="rounded-lg border border-go/40 bg-go-soft/50 p-6 text-center sm:text-left">
+      <p className="tech-label text-go mb-2">Bonne nouvelle</p>
+      <h3 className="text-xl font-semibold tracking-tight">
+        Ta boutique est deja solide
+      </h3>
+      <p className="mt-3 text-muted max-w-xl leading-relaxed">{body}</p>
+      <Link
+        href="/pricing"
+        className="inline-flex mt-6 bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
+      >
+        Obtenir la validation complete &rarr; Tarifs
+      </Link>
     </div>
   );
 }

@@ -37,7 +37,7 @@ Return a LIMITED teaser via the report_teaser tool:
 - "overall": the go/warning/no-go verdict.
 - "issueCount": the TOTAL number of compliance problems you found, even though
   you only detail a few below.
-- "teaserIssues": AT MOST 3 of the most important problems, each with only
+- "teaserIssues": AT MOST 2 of the most important problems, each with only
   "area", "severity" and a short "problem" written in FRENCH. Do NOT include any
   fix, correction, or how-to; that is intentionally withheld from the teaser.
 
@@ -78,8 +78,8 @@ const TEASER_TOOL: Anthropic.Tool = {
       },
       teaserIssues: {
         type: "array",
-        maxItems: 3,
-        description: "At most 3 problems, without the detailed fix.",
+        maxItems: 2,
+        description: "At most 2 problems, without the detailed fix.",
         items: {
           type: "object",
           properties: {
@@ -203,9 +203,9 @@ export async function POST(req: NextRequest) {
       teaserIssues?: TeaserIssue[];
     };
 
-    // Hard-cap the teased problems to 3 server-side, whatever the model returns.
+    // Hard-cap the teased problems to 2 server-side, whatever the model returns.
     const teaserIssues = (out.teaserIssues ?? [])
-      .slice(0, 3)
+      .slice(0, 2)
       .map((i) => ({
         area: i.area,
         severity: i.severity,
