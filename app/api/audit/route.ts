@@ -6,7 +6,12 @@ import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
 import { getShopToken, getShopOwner } from "../../../lib/db";
 import { getGoogleTokenForUser } from "../../../lib/googleStore";
 import { getMerchantStatus, type MerchantStatus } from "../../../lib/google";
-import { saveAudit, countAuditsForUserSince } from "../../../lib/audits";
+import {
+  countAuditsForUserSince,
+  createPendingAudit,
+  markAuditDone,
+  markAuditFailed,
+} from "../../../lib/audits";
 import { getOrCreateSubscription } from "../../../lib/subscriptions";
 import { limitsForPlan, startOfMonthUtc } from "../../../lib/plans";
 import { GMC_SKILL } from "../../../lib/gmcSkill";
@@ -397,6 +402,10 @@ export async function GET(req: NextRequest) {
   const anthropic = new Anthropic({ apiKey });
   const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
 
+  // Reserve the quota row as 'pending' BEFORE the paid Claude call. From here
+  // on the attempt counts against the quota even if the call fails afterwards.
+  const auditId = await createPendingAudit(userId, shop);
+
   try {
     const msg = await anthropic.messages.create({
       model,
@@ -441,6 +450,9 @@ export async function GET(req: NextRequest) {
     );
 
     if (!toolBlock) {
+      // The paid call happened but returned nothing usable: mark the reserved
+      // row failed so it still counts, then report the error.
+      await markAuditFailed(auditId).catch(() => {});
       return jsonResponse(
         { error: "Model did not return structured output", stop_reason: msg.stop_reason },
         { status: 502 },
@@ -449,12 +461,10 @@ export async function GET(req: NextRequest) {
 
     const audit = toolBlock.input as { overall?: string };
 
-    // Historise the audit against the signed-in user (verified above).
-    try {
-      await saveAudit(userId, shop, audit.overall ?? "unknown", audit);
-    } catch {
+    // Complete the reserved row for the signed-in user (verified above).
+    await markAuditDone(auditId, audit.overall ?? "unknown", audit).catch(() => {
       // persistence must never break returning the audit to the caller
-    }
+    });
 
     return jsonResponse({
       shop,
@@ -463,6 +473,9 @@ export async function GET(req: NextRequest) {
       audit: toolBlock.input,
     });
   } catch (err) {
+    // The call was engaged but errored: keep the reserved row as 'failed' so the
+    // attempt is counted against the quota (the Claude cost was paid).
+    await markAuditFailed(auditId).catch(() => {});
     return jsonResponse(
       { error: "Anthropic API call failed", detail: String(err) },
       { status: 502 },

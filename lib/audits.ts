@@ -20,6 +20,10 @@ async function ensureSchema(): Promise<void> {
       result jsonb
     )
   `;
+  // status tracks the lifecycle: 'pending' reserved before the Claude call,
+  // 'done' on success, 'failed' when the call errored after being engaged.
+  // Existing rows predate this and are treated as completed audits.
+  await sql`alter table audits add column if not exists status text not null default 'done'`;
   ready = true;
 }
 
@@ -32,33 +36,61 @@ export type AuditRow = {
   result: unknown;
 };
 
-export async function saveAudit(
+// Reserve a quota row as 'pending' right before the paid Claude call. Returns
+// the new row id so the caller can later mark it done or failed. Because the
+// row exists from this point on, a crash after the Claude call still consumes
+// the user's quota.
+export async function createPendingAudit(
   userId: string,
   shop: string,
+): Promise<string> {
+  await ensureSchema();
+  const sql = db();
+  const rows = (await sql`
+    insert into audits (user_id, shop, status)
+    values (${userId}, ${shop}, 'pending')
+    returning id
+  `) as { id: string }[];
+  return rows[0].id;
+}
+
+export async function markAuditDone(
+  id: string,
   overall: string,
   result: unknown,
 ): Promise<void> {
   await ensureSchema();
   const sql = db();
   await sql`
-    insert into audits (user_id, shop, overall, result)
-    values (${userId}, ${shop}, ${overall}, ${JSON.stringify(result)})
+    update audits
+    set status = 'done', overall = ${overall}, result = ${JSON.stringify(result)}
+    where id = ${id}
   `;
 }
 
+export async function markAuditFailed(id: string): Promise<void> {
+  await ensureSchema();
+  const sql = db();
+  await sql`update audits set status = 'failed' where id = ${id}`;
+}
+
+// History only surfaces completed audits, never pending or failed attempts.
 export async function getAuditsForUser(userId: string): Promise<AuditRow[]> {
   await ensureSchema();
   const sql = db();
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result
     from audits
-    where user_id = ${userId}
+    where user_id = ${userId} and status = 'done'
     order by created_at desc
     limit 50
   `) as AuditRow[];
   return rows;
 }
 
+// Counts every attempt that engaged the Claude call (pending + done + failed).
+// Requests rejected upstream (401/403/402) never insert a row, so they are not
+// counted here.
 export async function countAuditsForUserSince(
   userId: string,
   sinceISO: string,
