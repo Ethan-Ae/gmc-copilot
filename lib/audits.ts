@@ -59,6 +59,20 @@ export async function getAuditsForUser(userId: string): Promise<AuditRow[]> {
   return rows;
 }
 
+export async function countAuditsForUserSince(
+  userId: string,
+  sinceISO: string,
+): Promise<number> {
+  await ensureSchema();
+  const sql = db();
+  const rows = (await sql`
+    select count(*)::int as n
+    from audits
+    where user_id = ${userId} and created_at >= ${sinceISO}
+  `) as { n: number }[];
+  return rows.length ? rows[0].n : 0;
+}
+
 export async function getAuditById(
   id: string,
   userId: string,

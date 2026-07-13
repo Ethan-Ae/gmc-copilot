@@ -6,7 +6,9 @@ import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
 import { getShopToken, getShopOwner } from "../../../lib/db";
 import { getGoogleTokenForUser } from "../../../lib/googleStore";
 import { getMerchantStatus, type MerchantStatus } from "../../../lib/google";
-import { saveAudit } from "../../../lib/audits";
+import { saveAudit, countAuditsForUserSince } from "../../../lib/audits";
+import { getOrCreateSubscription } from "../../../lib/subscriptions";
+import { limitsForPlan, startOfMonthUtc } from "../../../lib/plans";
 import { GMC_SKILL } from "../../../lib/gmcSkill";
 import { crawlStorefront, type CrawlResult } from "../../../lib/crawl";
 
@@ -257,6 +259,22 @@ export async function GET(req: NextRequest) {
   const owner = await getShopOwner(shop);
   if (owner !== userId) {
     return jsonResponse({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Enforce the monthly audit quota for the user's plan before doing any work.
+  const sub = await getOrCreateSubscription(userId);
+  const limits = limitsForPlan(sub.plan);
+  const used = await countAuditsForUserSince(userId, startOfMonthUtc());
+  if (used >= limits.auditsPerMonth) {
+    return jsonResponse(
+      {
+        error: "audit_limit_reached",
+        plan: sub.plan,
+        used,
+        limit: limits.auditsPerMonth,
+      },
+      { status: 402 },
+    );
   }
 
   const token = await getShopToken(shop);
