@@ -27,7 +27,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Feedcompliant - Audit de conformite Google Merchant Center",
   description:
-    "Inspecte ta boutique Shopify et obtiens un verdict go / no-go avant la review Google Merchant Center.",
+    "Feedcompliant inspecte ta boutique Shopify et rend un verdict go / no-go avant la review Google Merchant Center.",
 };
 
 export default function RootLayout({

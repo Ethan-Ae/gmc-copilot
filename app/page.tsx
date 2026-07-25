@@ -140,7 +140,7 @@ export default function Home() {
       {/* Hero + teaser input */}
       <section className="mx-auto w-full max-w-3xl px-5 pt-16 sm:pt-24 pb-8">
         <p className="tech-label text-brand mb-4">
-          Audit de conformite Merchant Center
+          Feedcompliant - Audit de conformite Merchant Center
         </p>
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-tight max-w-2xl">
           Passe la conformite Google Merchant Center sans y passer des heures.
@@ -181,6 +181,17 @@ export default function Home() {
             ta boutique.
           </p>
         </div>
+      </section>
+
+      {/* Purpose / account connection */}
+      <section className="mx-auto w-full max-w-3xl px-5 pb-8">
+        <p className="text-muted max-w-2xl leading-relaxed">
+          Feedcompliant est un outil d&apos;audit de conformite Google Merchant
+          Center pour boutiques Shopify. Connecte ta boutique Shopify et ton
+          compte Google Merchant Center : Feedcompliant lit tes fiches produit
+          et le statut reel de ton compte pour produire un rapport de
+          conformite et des correctifs applicables en un clic.
+        </p>
       </section>
 
       {/* Result area */}
