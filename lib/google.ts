@@ -142,7 +142,7 @@ export async function getMerchantStatus(
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: "SELECT offer_id, title, item_issues FROM product_view",
+          query: "SELECT id, offer_id, title, item_issues FROM product_view",
           pageSize: 50,
         }),
       },
