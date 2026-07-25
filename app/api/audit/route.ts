@@ -5,7 +5,11 @@ import { jsonResponse } from "../../../lib/apiJson";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
 import { getShopToken, getShopOwner } from "../../../lib/db";
 import { getGoogleTokenForUser } from "../../../lib/googleStore";
-import { getMerchantStatus, type MerchantStatus } from "../../../lib/google";
+import {
+  getMerchantStatus,
+  isMerchantApiError,
+  type MerchantStatus,
+} from "../../../lib/google";
 import {
   countAuditsForUserSince,
   createPendingAudit,
@@ -402,6 +406,41 @@ export async function GET(req: NextRequest) {
     gmcStatus = null;
   }
 
+  // Build the Merchant Center section. Any part that came back as a structured
+  // API error is replaced with an honest factual line, never sent to Claude as
+  // if it were real data (which would let the model hallucinate on error JSON).
+  let gmcSection: string;
+  if (!gmcStatus) {
+    gmcSection =
+      "Aucun compte Google Merchant Center connecte pour ce marchand. " +
+      'Mets "source": "site" sur chaque issue.';
+  } else {
+    const lines: string[] = [];
+    if (isMerchantApiError(gmcStatus.accountIssues)) {
+      lines.push(
+        `Le statut Merchant Center n'a pas pu etre lu (erreur technique ${gmcStatus.accountIssues.apiError.status}).`,
+      );
+    } else {
+      lines.push(
+        "ACCOUNT ISSUES:\n" + JSON.stringify(gmcStatus.accountIssues),
+      );
+    }
+    if (isMerchantApiError(gmcStatus.products)) {
+      lines.push(
+        `Les problemes produit Merchant Center n'ont pas pu etre lus (erreur technique ${gmcStatus.products.apiError.status}).`,
+      );
+    } else if (gmcStatus.products != null) {
+      lines.push("PRODUCTS:\n" + JSON.stringify(gmcStatus.products));
+    }
+    lines.push(
+      "Compare les risques detectes sur le site avec les account issues " +
+        "disponibles ci-dessus. Ne traite pas une erreur technique comme une " +
+        'issue Merchant Center. Marque chaque issue du rapport avec le champ ' +
+        '"source" ("site", "gmc_confirmed" ou "both").',
+    );
+    gmcSection = lines.join("\n\n");
+  }
+
   const anthropic = new Anthropic({ apiKey });
   const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
 
@@ -435,13 +474,7 @@ export async function GET(req: NextRequest) {
                 "product data."
               : "") +
             "\n\nSTATUT MERCHANT CENTER REEL:\n" +
-            (gmcStatus
-              ? JSON.stringify(gmcStatus) +
-                "\n\nCompare les risques detectes sur le site avec les account " +
-                "issues actives ci-dessus. Marque chaque issue du rapport avec " +
-                'le champ "source" ("site", "gmc_confirmed" ou "both").'
-              : "Aucun compte Google Merchant Center connecte pour ce marchand. " +
-                'Mets "source": "site" sur chaque issue.') +
+            gmcSection +
             "\n\nWrite the summary, problem, and fix fields in French. " +
             "Call report_audit with your findings.",
         },

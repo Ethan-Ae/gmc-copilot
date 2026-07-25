@@ -69,6 +69,40 @@ export async function listMerchantAccounts(
   });
 }
 
+export interface MerchantApiError {
+  apiError: { endpoint: string; status: number; message: string };
+}
+
+function isMerchantApiError(value: unknown): value is MerchantApiError {
+  return (
+    typeof value === "object" && value !== null && "apiError" in value
+  );
+}
+
+export { isMerchantApiError };
+
+// Reads a Merchant API response. On a non-2xx status, logs the raw error body
+// (truncated) and returns a structured error instead of the raw envelope, so
+// callers never mistake an API error for real data.
+async function readMerchantResponse(
+  res: Response,
+  endpoint: string,
+): Promise<unknown> {
+  if (!res.ok) {
+    const raw = (await res.text().catch(() => "")).slice(0, 500);
+    console.error(`Merchant API ${endpoint} failed (${res.status}): ${raw}`);
+    let message = raw;
+    try {
+      const parsed = JSON.parse(raw) as { error?: { message?: string } };
+      message = parsed.error?.message ?? raw;
+    } catch {
+      // keep raw text as message
+    }
+    return { apiError: { endpoint, status: res.status, message } };
+  }
+  return res.json();
+}
+
 export interface MerchantStatus {
   accountId: string;
   accountIssues: unknown;
@@ -95,9 +129,11 @@ export async function getMerchantStatus(
     `${MERCHANT_BASE}/accounts/v1/accounts/${accountId}/issues?language_code=fr-FR&page_size=50`,
     { headers },
   );
-  const accountIssues = await issuesRes.json();
+  const accountIssues = await readMerchantResponse(issuesRes, "accounts.issues");
 
   // Sample of products with their item-level issues, via the Reports API.
+  // The Merchant API query language has no LIMIT clause; the sample size is set
+  // through pageSize in the request body instead.
   let products: unknown = null;
   try {
     const repRes = await fetch(
@@ -106,13 +142,14 @@ export async function getMerchantStatus(
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
-          query:
-            "SELECT offer_id, title, item_issues FROM product_view LIMIT 50",
+          query: "SELECT offer_id, title, item_issues FROM product_view",
+          pageSize: 50,
         }),
       },
     );
-    products = await repRes.json();
-  } catch {
+    products = await readMerchantResponse(repRes, "reports.search");
+  } catch (e) {
+    console.error("Merchant API reports.search threw:", e);
     products = null;
   }
 
