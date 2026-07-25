@@ -129,7 +129,7 @@ function Masthead({ shop }: { shop?: string }) {
     <header className="border-b border-line bg-ink text-paper">
       <div className="mx-auto w-full max-w-3xl px-5 py-3 flex items-center justify-between gap-4">
         <Link href="/" className="tech-label text-paper">
-          GMC Copilot
+          Feedcompliant
         </Link>
         <span className="tech-label text-faint truncate">
           {shop ?? "Rapport d'audit"}

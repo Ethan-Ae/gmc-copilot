@@ -25,7 +25,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GMC Copilot - Audit de conformite Google Merchant Center",
+  title: "Feedcompliant - Audit de conformite Google Merchant Center",
   description:
     "Inspecte ta boutique Shopify et obtiens un verdict go / no-go avant la review Google Merchant Center.",
 };
@@ -44,7 +44,7 @@ export default function RootLayout({
         <body className="min-h-full flex flex-col">
           <header className="flex items-center justify-between border-b border-line px-6 py-3">
             <Link href="/" className="tech-label text-brand">
-              GMC Copilot
+              Feedcompliant
             </Link>
             <div className="flex items-center gap-3">
               <Show when="signed-out">
@@ -65,6 +65,33 @@ export default function RootLayout({
             </div>
           </header>
           {children}
+          <footer className="border-t border-line px-6 py-4">
+            <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 sm:flex-row">
+              <span className="tech-label text-faint">
+                Feedcompliant
+              </span>
+              <nav className="flex items-center gap-4">
+                <Link
+                  href="/pricing"
+                  className="tech-label text-muted hover:text-ink"
+                >
+                  Tarifs
+                </Link>
+                <Link
+                  href="/privacy"
+                  className="tech-label text-muted hover:text-ink"
+                >
+                  Confidentialite
+                </Link>
+                <Link
+                  href="/terms"
+                  className="tech-label text-muted hover:text-ink"
+                >
+                  Conditions
+                </Link>
+              </nav>
+            </div>
+          </footer>
         </body>
       </html>
     </ClerkProvider>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Tarifs - GMC Copilot",
+  title: "Tarifs - Feedcompliant",
   description:
     "Choisis l'offre pour passer la conformite Google Merchant Center : audit express gratuit, mise en conformite one-shot ou offre agence.",
 };

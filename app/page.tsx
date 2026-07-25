@@ -132,7 +132,7 @@ export default function Home() {
     <main className="flex-1 flex flex-col">
       <header className="border-b border-line bg-ink text-paper">
         <div className="mx-auto w-full max-w-3xl px-5 py-3 flex items-center justify-between">
-          <span className="tech-label text-paper">GMC Copilot</span>
+          <span className="tech-label text-paper">Feedcompliant</span>
           <span className="tech-label text-faint">Inspection console</span>
         </div>
       </header>
