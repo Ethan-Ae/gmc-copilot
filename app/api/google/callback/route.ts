@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsonResponse } from "../../../../lib/apiJson";
-import { getGoogleEnv } from "../../../../lib/google";
-import { saveGoogleToken } from "../../../../lib/googleStore";
+import { getGoogleEnv, listMerchantAccounts } from "../../../../lib/google";
+import {
+  saveGoogleToken,
+  saveMerchantResolution,
+} from "../../../../lib/googleStore";
 
 export const runtime = "nodejs";
 
@@ -97,6 +100,7 @@ export async function GET(req: NextRequest) {
     : null;
 
   // refresh_token is only returned on first consent (forced here via prompt=consent)
+  let dashboardQuery = "";
   if (tok.refresh_token) {
     await saveGoogleToken(
       sub,
@@ -106,10 +110,32 @@ export async function GET(req: NextRequest) {
       expiresAt,
       userId,
     );
+
+    // Resolve which Merchant Center account this user actually administers, so
+    // audits no longer fall back to a shared/hardcoded account. A failure here
+    // must not break the connection, so we swallow errors and let the user retry.
+    try {
+      const accounts = await listMerchantAccounts(tok.refresh_token);
+      if (accounts.length === 1) {
+        await saveMerchantResolution(sub, accounts[0].id, accounts, false);
+      } else if (accounts.length > 1) {
+        // Store the full list and default to the first; the dashboard will ask
+        // the user to confirm which account to use.
+        await saveMerchantResolution(sub, accounts[0].id, accounts, true);
+        dashboardQuery = "?google=choose_account";
+      } else {
+        await saveMerchantResolution(sub, null, [], false);
+        dashboardQuery = "?google=no_merchant_account";
+      }
+    } catch {
+      // Leave merchant fields untouched; the user can reconnect to retry.
+    }
   }
 
   // Connection done: hand the merchant back to their dashboard.
-  const res = NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
+  const res = NextResponse.redirect(
+    new URL(`/dashboard${dashboardQuery}`, req.nextUrl.origin),
+  );
   res.cookies.delete("google_oauth_state");
   return res;
 }

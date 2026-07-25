@@ -40,37 +40,56 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
 
 const MERCHANT_BASE = "https://merchantapi.googleapis.com";
 
+export interface MerchantAccount {
+  id: string;
+  name: string;
+}
+
+// Lists the Merchant Center accounts the Google user behind this refresh token
+// administers. Used at OAuth callback to resolve and persist the account id.
+export async function listMerchantAccounts(
+  refreshToken: string,
+): Promise<MerchantAccount[]> {
+  const accessToken = await refreshAccessToken(refreshToken);
+  const accRes = await fetch(`${MERCHANT_BASE}/accounts/v1/accounts`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  if (!accRes.ok) {
+    throw new Error(`Merchant accounts.list failed (${accRes.status})`);
+  }
+  const accBody = (await accRes.json()) as {
+    accounts?: { name: string; accountName?: string }[];
+  };
+  return (accBody.accounts ?? []).map((a) => {
+    const id = a.name.split("/").pop() as string;
+    return { id, name: a.accountName ?? id };
+  });
+}
+
 export interface MerchantStatus {
   accountId: string;
   accountIssues: unknown;
   products: unknown;
 }
 
-// Reads the real Merchant Center status for the Google account behind a stored
-// refresh token: account-level issues and a sample of products with their
-// item-level issues. The accountId is resolved from the first Merchant Center
-// account this Google user administers (none is stored on our side).
+// Reads the real Merchant Center status for a specific account: account-level
+// issues and a sample of products with their item-level issues. The accountId
+// is the one resolved and stored for the current user at connection time.
 export async function getMerchantStatus(
   refreshToken: string,
+  accountId: string | null,
 ): Promise<MerchantStatus> {
+  if (!accountId) {
+    throw new Error("Aucun compte Merchant Center associé");
+  }
   const accessToken = await refreshAccessToken(refreshToken);
   const headers = {
     Authorization: `Bearer ${accessToken}`,
     Accept: "application/json",
   };
-
-  const accRes = await fetch(`${MERCHANT_BASE}/accounts/v1/accounts`, {
-    headers,
-  });
-  if (!accRes.ok) {
-    throw new Error(`Merchant accounts.list failed (${accRes.status})`);
-  }
-  const accBody = (await accRes.json()) as { accounts?: { name: string }[] };
-  const first = (accBody.accounts ?? [])[0];
-  if (!first) {
-    throw new Error("No Merchant Center account accessible from this Google user");
-  }
-  const accountId = first.name.split("/").pop() as string;
 
   const issuesRes = await fetch(
     `${MERCHANT_BASE}/accounts/v1/accounts/${accountId}/issues?language_code=fr-FR&page_size=50`,

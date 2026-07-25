@@ -393,7 +393,10 @@ export async function GET(req: NextRequest) {
   try {
     const googleTok = await getGoogleTokenForUser(userId);
     if (googleTok) {
-      gmcStatus = await getMerchantStatus(googleTok.refresh_token);
+      gmcStatus = await getMerchantStatus(
+        googleTok.refresh_token,
+        googleTok.merchant_account_id,
+      );
     }
   } catch {
     gmcStatus = null;

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { getShopsForUser } from "../../lib/db";
 import { getAuditsForUser, type AuditRow } from "../../lib/audits";
+import { getMerchantSelectionForUser } from "../../lib/googleStore";
 import ConnectShopify from "./ConnectShopify";
+import MerchantAccountPicker from "./MerchantAccountPicker";
 
 export const runtime = "nodejs";
 
@@ -32,13 +34,24 @@ function formatDate(value: string): string {
   });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
   const { userId } = await auth();
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? "inconnu";
 
   const shops = userId ? await getShopsForUser(userId) : [];
   const audits: AuditRow[] = userId ? await getAuditsForUser(userId) : [];
+  const merchant = userId ? await getMerchantSelectionForUser(userId) : null;
+  const googleNotice = (await searchParams).google;
+  const noMerchantAccount =
+    googleNotice === "no_merchant_account" ||
+    (merchant !== null &&
+      !merchant.needs_account_choice &&
+      merchant.merchant_account_id === null);
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 p-6">
@@ -52,12 +65,37 @@ export default async function DashboardPage() {
             <ConnectShopify />
           </div>
         </div>
-        <Link
-          href="/api/google/auth"
-          className="tech-label self-start rounded border border-line-strong px-4 py-2 text-ink hover:bg-slate-soft"
-        >
-          Connecter Google Merchant Center
-        </Link>
+        <div>
+          <Link
+            href="/api/google/auth"
+            className="tech-label self-start rounded border border-line-strong px-4 py-2 text-ink hover:bg-slate-soft inline-block"
+          >
+            Connecter Google Merchant Center
+          </Link>
+
+          {merchant?.needs_account_choice && merchant.accounts.length > 0 && (
+            <MerchantAccountPicker
+              accounts={merchant.accounts}
+              current={merchant.merchant_account_id}
+            />
+          )}
+
+          {noMerchantAccount && (
+            <div className="mt-2 rounded-lg border border-nogo/40 bg-nogo-soft/50 p-4">
+              <p className="text-ink">
+                Aucun compte Merchant Center n&apos;est associe a ce compte
+                Google. Connecte un compte Google qui administre un compte
+                Merchant Center, puis reessaie.
+              </p>
+            </div>
+          )}
+
+          {merchant?.merchant_account_id && !merchant.needs_account_choice && (
+            <p className="mt-2 tech-label text-faint">
+              Compte Merchant Center : {merchant.merchant_account_id}
+            </p>
+          )}
+        </div>
       </div>
 
       <section className="mt-8">
