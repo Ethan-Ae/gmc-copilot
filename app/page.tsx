@@ -133,7 +133,9 @@ export default function Home() {
       <header className="border-b border-line bg-ink text-paper">
         <div className="mx-auto w-full max-w-3xl px-5 py-3 flex items-center justify-between">
           <span className="tech-label text-paper">Feedcompliant</span>
-          <span className="tech-label text-faint">Inspection console</span>
+          <Link href="/dashboard" className="tech-label text-faint">
+            Inspection console
+          </Link>
         </div>
       </header>
 
