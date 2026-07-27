@@ -49,11 +49,18 @@ interface Audit {
   checked: string[];
 }
 
+interface Entitlements {
+  canFullAudit: boolean;
+  canApplyFixes: boolean;
+  source: string;
+}
+
 interface AuditResponse {
   shop: string;
   model: string;
   truncated: boolean;
   audit: Audit;
+  entitlements?: Entitlements;
 }
 
 type State =
@@ -291,6 +298,9 @@ function ResultView({
   const issues = [...audit.issues].sort(
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
   );
+  // Fix actions require full rights. When entitlements are absent (older
+  // response), default to allowed - the /api/fix route still enforces apply.
+  const canApplyFixes = data.entitlements?.canApplyFixes ?? true;
 
   return (
     <div className="rise space-y-8">
@@ -346,7 +356,12 @@ function ResultView({
         ) : (
           <ul className="space-y-4">
             {issues.map((issue, i) => (
-              <IssueCard key={i} issue={issue} shop={data.shop} />
+              <IssueCard
+                key={i}
+                issue={issue}
+                shop={data.shop}
+                canApplyFixes={canApplyFixes}
+              />
             ))}
           </ul>
         )}
@@ -377,7 +392,15 @@ function ResultView({
   );
 }
 
-function IssueCard({ issue, shop }: { issue: Issue; shop: string }) {
+function IssueCard({
+  issue,
+  shop,
+  canApplyFixes,
+}: {
+  issue: Issue;
+  shop: string;
+  canApplyFixes: boolean;
+}) {
   const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
   return (
     <li className="bg-surface border border-line rounded-lg p-5">
@@ -406,10 +429,33 @@ function IssueCard({ issue, shop }: { issue: Issue; shop: string }) {
         <p className="tech-label text-brand mb-1">Correctif</p>
         <p className="text-ink leading-relaxed">{issue.fix}</p>
       </div>
-      {issue.patch?.autoApplicable && (
-        <FixActions shop={shop} patch={issue.patch} />
-      )}
+      {issue.patch?.autoApplicable &&
+        (canApplyFixes ? (
+          <FixActions shop={shop} patch={issue.patch} />
+        ) : (
+          <FixLocked />
+        ))}
     </li>
+  );
+}
+
+// Shown in place of the preview/apply buttons when the audited shop has no full
+// rights. The report itself stays fully visible; only the write actions are
+// gated behind the dashboard payment block.
+function FixLocked() {
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <p className="text-sm text-muted">
+        La correction automatique est reservee aux boutiques ayant debloque la
+        mise en conformite.
+      </p>
+      <Link
+        href="/dashboard"
+        className="tech-label mt-3 inline-block rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
+      >
+        Debloquer la mise en conformite
+      </Link>
+    </div>
   );
 }
 

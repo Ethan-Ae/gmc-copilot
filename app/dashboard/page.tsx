@@ -5,6 +5,7 @@ import { getAuditsForUser, type AuditRow } from "../../lib/audits";
 import { getMerchantSelectionForUser } from "../../lib/googleStore";
 import ConnectShopify from "./ConnectShopify";
 import MerchantAccountPicker from "./MerchantAccountPicker";
+import ShopBilling from "./ShopBilling";
 
 export const runtime = "nodejs";
 
@@ -37,7 +38,7 @@ function formatDate(value: string): string {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ google?: string }>;
+  searchParams: Promise<{ google?: string; billing?: string }>;
 }) {
   const { userId } = await auth();
   const user = await currentUser();
@@ -46,7 +47,9 @@ export default async function DashboardPage({
   const shops = userId ? await getShopsForUser(userId) : [];
   const audits: AuditRow[] = userId ? await getAuditsForUser(userId) : [];
   const merchant = userId ? await getMerchantSelectionForUser(userId) : null;
-  const googleNotice = (await searchParams).google;
+  const params = await searchParams;
+  const googleNotice = params.google;
+  const billingReturned = params.billing === "done";
   const noMerchantAccount =
     googleNotice === "no_merchant_account" ||
     (merchant !== null &&
@@ -57,6 +60,15 @@ export default async function DashboardPage({
     <main className="mx-auto w-full max-w-3xl flex-1 p-6">
       <p className="tech-label text-muted">Connecté : {email}</p>
       <h1 className="mt-2 text-2xl font-semibold text-ink">Tableau de bord</h1>
+
+      {billingReturned && (
+        <div className="mt-4 rounded-lg border border-go/40 bg-go-soft/60 p-4">
+          <p className="text-ink">
+            Retour de Shopify pris en compte. L&apos;etat de facturation
+            ci-dessous est a jour.
+          </p>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col gap-4">
         <div>
@@ -107,22 +119,24 @@ export default async function DashboardPage({
         ) : (
           <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
             {shops.map((s) => (
-              <li
-                key={s.shop}
-                className="flex items-center justify-between px-4 py-3"
-              >
-                <div>
-                  <p className="font-medium text-ink">{s.shop}</p>
-                  <p className="tech-label text-faint">
-                    Mise à jour {formatDate(s.updated_at)}
-                  </p>
+              <li key={s.shop} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-ink">{s.shop}</p>
+                    <p className="tech-label text-faint">
+                      Mise à jour {formatDate(s.updated_at)}
+                    </p>
+                  </div>
+                  <a
+                    href={`/report?shop=${encodeURIComponent(s.shop.trim())}`}
+                    className="tech-label rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
+                  >
+                    Auditer
+                  </a>
                 </div>
-                <a
-                  href={`/report?shop=${encodeURIComponent(s.shop.trim())}`}
-                  className="tech-label rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
-                >
-                  Auditer
-                </a>
+                <div className="mt-3">
+                  <ShopBilling shop={s.shop.trim()} />
+                </div>
               </li>
             ))}
           </ul>

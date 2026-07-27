@@ -3,8 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../lib/apiJson";
 import { isValidShop } from "../../../lib/shopify";
 import { getShopToken, getShopOwner } from "../../../lib/db";
-import { getOrCreateSubscription } from "../../../lib/subscriptions";
-import { limitsForPlan } from "../../../lib/plans";
+import { getEntitlements } from "../../../lib/entitlements";
 import { recordFix } from "../../../lib/fixHistory";
 import {
   APPLICABLE_FIX_TYPES,
@@ -49,11 +48,12 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "forbidden" }, { status: 403 });
   }
 
-  // (b bis) Applying a fix writes to Shopify: gate it on the plan. Preview stays
-  // open to every plan so free users can still see the proposed change.
+  // (b bis) Applying a fix writes to Shopify: gate it on the shop's
+  // entitlements (Shopify Billing or legacy pro). Preview stays open to every
+  // plan so free users can still see the proposed change.
   if (mode === "apply") {
-    const sub = await getOrCreateSubscription(userId);
-    if (!limitsForPlan(sub.plan).canApplyFixes) {
+    const entitlements = await getEntitlements(userId, shop);
+    if (!entitlements.canApplyFixes) {
       return jsonResponse({ error: "upgrade_required" }, { status: 403 });
     }
   }

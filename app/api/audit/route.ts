@@ -16,7 +16,7 @@ import {
   markAuditDone,
   markAuditFailed,
 } from "../../../lib/audits";
-import { getOrCreateSubscription } from "../../../lib/subscriptions";
+import { getEntitlements } from "../../../lib/entitlements";
 import { limitsForPlan, startOfMonthUtc } from "../../../lib/plans";
 import { GMC_SKILL } from "../../../lib/gmcSkill";
 import { crawlStorefront, type CrawlResult } from "../../../lib/crawl";
@@ -270,15 +270,17 @@ export async function GET(req: NextRequest) {
     return jsonResponse({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Enforce the monthly audit quota for the user's plan before doing any work.
-  const sub = await getOrCreateSubscription(userId);
-  const limits = limitsForPlan(sub.plan);
+  // Resolve entitlements (Shopify Billing on the shop, then legacy pro, then
+  // free). Full rights get the pro monthly quota; free keeps the free quota so
+  // the existing per-month counting is unchanged.
+  const entitlements = await getEntitlements(userId, shop);
+  const limits = limitsForPlan(entitlements.canFullAudit ? "pro" : "free");
   const used = await countAuditsForUserSince(userId, startOfMonthUtc());
   if (used >= limits.auditsPerMonth) {
     return jsonResponse(
       {
         error: "audit_limit_reached",
-        plan: sub.plan,
+        source: entitlements.source,
         used,
         limit: limits.auditsPerMonth,
       },
@@ -507,6 +509,11 @@ export async function GET(req: NextRequest) {
       model,
       truncated: msg.stop_reason === "max_tokens",
       audit: toolBlock.input,
+      entitlements: {
+        canFullAudit: entitlements.canFullAudit,
+        canApplyFixes: entitlements.canApplyFixes,
+        source: entitlements.source,
+      },
     });
   } catch (err) {
     // The call was engaged but errored: keep the reserved row as 'failed' so the
