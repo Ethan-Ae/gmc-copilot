@@ -145,8 +145,13 @@ export default function Home() {
           Feedcompliant - Audit de conformite Merchant Center
         </p>
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-tight max-w-2xl">
-          Passe la conformite Google Merchant Center sans y passer des heures.
+          Feedcompliant fait passer la conformite Google Merchant Center sans y
+          passer des heures.
         </h1>
+        <h2 className="mt-4 text-lg text-muted max-w-xl leading-relaxed">
+          Feedcompliant - audit et correctifs de conformite pour boutiques
+          Shopify
+        </h2>
         <p className="mt-4 text-muted max-w-xl leading-relaxed">
           Entre l&apos;URL de ta boutique. On inspecte ta vitrine publique et on
           rend un verdict clair en 30 secondes, gratuitement et sans compte.
