@@ -28,11 +28,15 @@ async function ensureSchema(): Promise<void> {
 
 // none|pending|active|declined
 export type OneTimeStatus = "none" | "pending" | "active" | "declined";
-// none|pending|active|cancelled|frozen|declined
+// none|pending|active|inactive|cancelled|frozen|declined
+// 'inactive' is written by the app_subscriptions/update webhook to collapse any
+// non-active lifecycle state (cancelled/expired/declined/frozen) into a single
+// "monitoring access cut" value. Only 'active' ever grants entitlements.
 export type SubscriptionStatus =
   | "none"
   | "pending"
   | "active"
+  | "inactive"
   | "cancelled"
   | "frozen"
   | "declined";
@@ -99,6 +103,29 @@ export async function markSubscriptionPending(
           test_mode = ${testMode},
           updated_at = now()
   `;
+}
+
+// Apply an app_subscriptions/update webhook: set the subscription status and
+// record the subscription gid. Only touches existing rows (a subscription
+// lifecycle event for a shop we never provisioned billing for is a no-op we log
+// upstream). Returns true when a row matched. Idempotent: replaying the same
+// webhook writes the same values.
+export async function applySubscriptionWebhook(
+  shop: string,
+  status: SubscriptionStatus,
+  subscriptionId: string | null,
+): Promise<boolean> {
+  await ensureSchema();
+  const sql = db();
+  const rows = (await sql`
+    update billing_state
+      set subscription_status = ${status},
+          subscription_id = ${subscriptionId},
+          updated_at = now()
+    where shop = ${shop}
+    returning shop
+  `) as { shop: string }[];
+  return rows.length > 0;
 }
 
 // Write the statuses derived from the live Shopify API. This is the source of
