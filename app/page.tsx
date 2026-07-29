@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Show, SignInButton } from "@clerk/nextjs";
 import { useState } from "react";
 
 // --- Teaser contract (see app/api/teaser/route.ts) ---
@@ -133,9 +134,18 @@ export default function Home() {
       <header className="border-b border-line bg-ink text-paper">
         <div className="mx-auto w-full max-w-3xl px-5 py-3 flex items-center justify-between">
           <span className="tech-label text-paper">Feedcompliant</span>
-          <Link href="/dashboard" className="tech-label text-faint">
-            Inspection console
-          </Link>
+          <Show when="signed-in">
+            <Link href="/dashboard" className="tech-label text-faint">
+              Tableau de bord
+            </Link>
+          </Show>
+          <Show when="signed-out">
+            <SignInButton mode="modal" forceRedirectUrl="/dashboard">
+              <button className="tech-label text-faint hover:text-paper">
+                Tableau de bord
+              </button>
+            </SignInButton>
+          </Show>
         </div>
       </header>
 

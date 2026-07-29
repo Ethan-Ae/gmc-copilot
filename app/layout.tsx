@@ -48,18 +48,24 @@ export default function RootLayout({
             </Link>
             <div className="flex items-center gap-3">
               <Show when="signed-out">
-                <SignInButton mode="modal">
+                <SignInButton mode="modal" forceRedirectUrl="/dashboard">
                   <button className="tech-label text-muted hover:text-ink">
                     Connexion
                   </button>
                 </SignInButton>
-                <SignUpButton mode="modal">
+                <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
                   <button className="tech-label rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink">
                     Inscription
                   </button>
                 </SignUpButton>
               </Show>
               <Show when="signed-in">
+                <Link
+                  href="/dashboard"
+                  className="tech-label text-muted hover:text-ink"
+                >
+                  Tableau de bord
+                </Link>
                 <UserButton />
               </Show>
             </div>
