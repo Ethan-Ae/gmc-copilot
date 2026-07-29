@@ -2,7 +2,11 @@ import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../lib/apiJson";
 import { isValidShop } from "../../../lib/shopify";
-import { getShopToken, getShopOwner } from "../../../lib/db";
+import { getShopOwner } from "../../../lib/db";
+import {
+  getShopifyAccessToken,
+  ShopifyReauthRequired,
+} from "../../../lib/shopifyToken";
 import { getEntitlements } from "../../../lib/entitlements";
 import { recordFix } from "../../../lib/fixHistory";
 import {
@@ -64,9 +68,14 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "fix_type_not_applicable" }, { status: 403 });
   }
 
-  const token = await getShopToken(shop);
-  if (!token) {
-    return jsonResponse({ error: "no_token" }, { status: 404 });
+  let token: string;
+  try {
+    token = await getShopifyAccessToken(shop);
+  } catch (err) {
+    if (err instanceof ShopifyReauthRequired) {
+      return jsonResponse({ error: "shopify_reauth_required" }, { status: 401 });
+    }
+    return jsonResponse({ error: "shopify_token_error" }, { status: 502 });
   }
 
   const newValue = patch.newValue ?? "";

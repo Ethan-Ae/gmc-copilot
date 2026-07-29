@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { jsonResponse } from "../../../../lib/apiJson";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../../lib/shopify";
-import { getShopToken } from "../../../../lib/db";
+import {
+  getShopifyAccessToken,
+  ShopifyReauthRequired,
+} from "../../../../lib/shopifyToken";
 
 export const runtime = "nodejs";
 
@@ -13,11 +16,19 @@ export async function GET(req: NextRequest) {
     return jsonResponse({ error: "Invalid shop" }, { status: 400 });
   }
 
-  const token = await getShopToken(shop);
-  if (!token) {
+  let token: string;
+  try {
+    token = await getShopifyAccessToken(shop);
+  } catch (err) {
+    if (err instanceof ShopifyReauthRequired) {
+      return jsonResponse(
+        { connected: false, shop, note: "Shopify re-authorization required. Reconnect the app." },
+        { status: 401 },
+      );
+    }
     return jsonResponse(
-      { connected: false, shop, note: "No token in the database. Install the app first." },
-      { status: 404 },
+      { connected: false, shop, note: "Could not obtain a Shopify access token." },
+      { status: 502 },
     );
   }
 

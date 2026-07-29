@@ -3,7 +3,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../lib/apiJson";
 import { isValidShop, SHOPIFY_API_VERSION } from "../../../lib/shopify";
-import { getShopToken, getShopOwner } from "../../../lib/db";
+import { getShopOwner } from "../../../lib/db";
+import {
+  getShopifyAccessToken,
+  ShopifyReauthRequired,
+} from "../../../lib/shopifyToken";
 import { getGoogleTokenForUser } from "../../../lib/googleStore";
 import {
   getMerchantStatus,
@@ -288,11 +292,19 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const token = await getShopToken(shop);
-  if (!token) {
+  let token: string;
+  try {
+    token = await getShopifyAccessToken(shop);
+  } catch (err) {
+    if (err instanceof ShopifyReauthRequired) {
+      return jsonResponse(
+        { error: "Shopify re-authorization required. Reconnect the app." },
+        { status: 401 },
+      );
+    }
     return jsonResponse(
-      { error: "No token in the database. Install the app first." },
-      { status: 404 },
+      { error: "Could not obtain a Shopify access token." },
+      { status: 502 },
     );
   }
 

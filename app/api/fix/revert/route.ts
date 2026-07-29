@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../lib/apiJson";
-import { getShopToken } from "../../../../lib/db";
+import {
+  getShopifyAccessToken,
+  ShopifyReauthRequired,
+} from "../../../../lib/shopifyToken";
 import { getFixById, markReverted } from "../../../../lib/fixHistory";
 import { norm, resolveTarget, type Patch } from "../../../../lib/shopifyFix";
 
@@ -39,9 +42,14 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "already_reverted" }, { status: 409 });
   }
 
-  const token = await getShopToken(fix.shop);
-  if (!token) {
-    return jsonResponse({ error: "no_token" }, { status: 404 });
+  let token: string;
+  try {
+    token = await getShopifyAccessToken(fix.shop);
+  } catch (err) {
+    if (err instanceof ShopifyReauthRequired) {
+      return jsonResponse({ error: "shopify_reauth_required" }, { status: 401 });
+    }
+    return jsonResponse({ error: "shopify_token_error" }, { status: 502 });
   }
 
   // Rebuild the patch to write previous_value back into the same target.

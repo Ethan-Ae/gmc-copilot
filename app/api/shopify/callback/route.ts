@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsonResponse } from "../../../../lib/apiJson";
 import { getEnv, isValidShop, verifyHmac } from "../../../../lib/shopify";
-import { saveShopToken } from "../../../../lib/db";
+import { persistOAuthTokens } from "../../../../lib/shopifyToken";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,14 @@ export async function GET(req: NextRequest) {
   const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ client_id: apiKey, client_secret: apiSecret, code }),
+    // expiring=1 requests an expiring offline token (access token + refresh
+    // token); Shopify no longer accepts non-expiring offline tokens.
+    body: JSON.stringify({
+      client_id: apiKey,
+      client_secret: apiSecret,
+      code,
+      expiring: 1,
+    }),
   });
 
   if (!tokenRes.ok) {
@@ -49,11 +56,14 @@ export async function GET(req: NextRequest) {
   const tokenJson = (await tokenRes.json()) as {
     access_token: string;
     scope?: string;
+    expires_in?: number;
+    refresh_token?: string;
+    refresh_token_expires_in?: number;
   };
-  const accessToken = tokenJson.access_token;
 
-  // Persist the token so the connection survives without reinstalling
-  await saveShopToken(shop, accessToken, tokenJson.scope ?? null, userId);
+  // Persist the token pair + expirations so the connection survives without
+  // reinstalling and can be refreshed server-side.
+  await persistOAuthTokens(shop, tokenJson.scope ?? null, userId, tokenJson);
 
   // Connection done: hand the merchant back to their dashboard.
   const dashboardUrl = new URL("/dashboard", req.nextUrl.origin);

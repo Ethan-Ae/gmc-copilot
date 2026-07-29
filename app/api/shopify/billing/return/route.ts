@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidShop } from "../../../../../lib/shopify";
-import { getShopToken } from "../../../../../lib/db";
+import { getShopifyAccessToken } from "../../../../../lib/shopifyToken";
 import { syncBillingState } from "../../../../../lib/shopifyBilling";
 
 export const runtime = "nodejs";
@@ -14,13 +14,11 @@ export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop")?.trim().toLowerCase();
 
   if (shop && isValidShop(shop)) {
-    const token = await getShopToken(shop);
-    if (token) {
-      try {
-        await syncBillingState(shop, token);
-      } catch {
-        // Sync is best-effort here; the status route can reconcile later.
-      }
+    try {
+      const token = await getShopifyAccessToken(shop);
+      await syncBillingState(shop, token);
+    } catch {
+      // Sync is best-effort here; the status route can reconcile later.
     }
   }
 
