@@ -36,31 +36,18 @@ const OFFERS: Offer[] = [
   {
     eyebrow: "One-shot",
     name: "Mise en conformite",
-    price: "200 CHF",
+    price: "149 CHF",
     priceNote: "paiement unique",
-    pitch: "Passe une boutique en conformite, du diagnostic aux correctifs.",
+    pitch:
+      "Acces complet a une boutique pendant 30 jours, du diagnostic aux correctifs, jusqu'a la validation Google.",
     features: [
-      "1 boutique, acces 30 jours",
+      "1 boutique, acces complet 30 jours",
       "Rapport complet, tous les problemes",
       "Correctifs en 1 clic",
-      "Re-audits illimites pendant 30 jours",
+      "Audits et re-audits illimites pendant 30 jours",
     ],
-    cta: { label: "Choisir cette offre" },
+    cta: { label: "Debloquer depuis le tableau de bord", href: "/dashboard" },
     highlight: true,
-  },
-  {
-    eyebrow: "Mensuel",
-    name: "Agence",
-    price: "1400 CHF",
-    priceNote: "par mois",
-    pitch: "Pour les agences qui mettent en conformite plusieurs boutiques.",
-    features: [
-      "Boutiques illimitees",
-      "Toutes les fonctions one-shot par boutique",
-      "Re-audits illimites",
-      "Rentable des 7 boutiques",
-    ],
-    cta: { label: "Choisir cette offre" },
   },
 ];
 
@@ -80,16 +67,22 @@ export default function PricingPage() {
       </section>
 
       {/* Offer cards */}
-      <section className="mx-auto w-full max-w-5xl px-5 pb-8">
-        <div className="grid gap-6 md:grid-cols-3 items-stretch">
+      <section className="mx-auto w-full max-w-3xl px-5 pb-8">
+        <div className="grid gap-6 md:grid-cols-2 items-stretch">
           {OFFERS.map((o) => (
             <OfferCard key={o.name} offer={o} />
           ))}
         </div>
 
         <p className="mt-8 text-center text-sm text-muted max-w-xl mx-auto leading-relaxed">
-          Le paiement arrive bientot. Pour l&apos;instant, aucun prelevement
-          n&apos;est effectue : tu peux deja lancer un audit gratuit.
+          Vous gerez plusieurs boutiques ou une agence ? Ecrivez-nous a{" "}
+          <a
+            href="mailto:ethan.aeby08@outlook.com"
+            className="text-brand hover:underline"
+          >
+            ethan.aeby08@outlook.com
+          </a>{" "}
+          pour une offre adaptee.
         </p>
       </section>
     </main>

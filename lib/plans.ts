@@ -10,7 +10,10 @@ export type PlanLimits = {
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   free: { auditsPerMonth: 3, canApplyFixes: false },
-  pro: { auditsPerMonth: 50, canApplyFixes: true },
+  // Full access (one-time 149 CHF, 30 days) means unlimited audits on the shop.
+  // The 200/month value is only a safety cap to protect against runaway API
+  // costs, not a plan the merchant is expected to reach.
+  pro: { auditsPerMonth: 200, canApplyFixes: true },
 };
 
 // Any unknown or legacy plan value degrades to the free limits.

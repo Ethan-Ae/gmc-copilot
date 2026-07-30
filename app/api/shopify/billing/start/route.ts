@@ -7,10 +7,7 @@ import {
   getShopifyAccessToken,
   ShopifyReauthRequired,
 } from "../../../../../lib/shopifyToken";
-import {
-  createOneTimeCharge,
-  createSubscription,
-} from "../../../../../lib/shopifyBilling";
+import { createOneTimeCharge } from "../../../../../lib/shopifyBilling";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -32,7 +29,7 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { shop?: string; type?: "one_time" | "subscription" };
+  let body: { shop?: string; type?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -44,8 +41,10 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "invalid_shop" }, { status: 400 });
   }
 
-  const type = body.type;
-  if (type !== "one_time" && type !== "subscription") {
+  // Since the pricing pivot only the one-time 149 CHF charge is sold. The
+  // monthly subscription path is retired (createSubscription stays in
+  // lib/shopifyBilling.ts but is no longer reachable from here).
+  if (body.type !== undefined && body.type !== "one_time") {
     return jsonResponse({ error: "invalid_type" }, { status: 400 });
   }
 
@@ -68,10 +67,9 @@ export async function POST(req: NextRequest) {
   const test = isTestShop(shop);
 
   try {
-    const { confirmationUrl } =
-      type === "one_time"
-        ? await createOneTimeCharge(shop, token, { test })
-        : await createSubscription(shop, token, { test });
+    const { confirmationUrl } = await createOneTimeCharge(shop, token, {
+      test,
+    });
     return jsonResponse({ confirmationUrl });
   } catch (err) {
     return jsonResponse(

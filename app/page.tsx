@@ -463,8 +463,8 @@ function HowItWorks() {
     },
     {
       n: "03",
-      title: "Reste conforme",
-      body: "On verifie que la donnee a bien propage avant de te donner un go, et on te previent si un risque reapparait.",
+      title: "Re-audite jusqu'au go",
+      body: "Pendant 30 jours d'acces complet, re-audite autant que tu veux. On verifie que la donnee a bien propage avant de te donner un go pour la review Google.",
     },
   ];
   return (

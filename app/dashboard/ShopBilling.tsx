@@ -2,24 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-// Minimal shape of billing_state as returned by /api/shopify/billing/status.
-// Kept local so this client component never imports server-only modules.
-type BillingState = {
-  one_time_status: string;
-  subscription_status: string;
-} | null;
-
-type ChargeType = "one_time" | "subscription";
+// Minimal shape of billing_state + derived access flags as returned by
+// /api/shopify/billing/status. Kept local so this client component never
+// imports server-only modules.
+type Access = { full: boolean; expired: boolean };
+type BillingStatus = { access: Access } | null;
 
 type LoadState = "loading" | "loaded" | "load-error";
 
-// Per-shop billing panel: reads the current Shopify Billing state and lets the
-// merchant unlock the one-time compliance charge or the monthly monitoring
-// subscription. Starting a charge redirects to Shopify's confirmationUrl.
+// Per-shop billing panel. Since the pricing pivot there is a single offer: the
+// one-time 149 CHF "Mise en conformite" charge, which unlocks full access to
+// the shop for 30 days. After that the access expires and the merchant can
+// re-run a compliance. Starting a charge redirects to Shopify's confirmationUrl.
 export default function ShopBilling({ shop }: { shop: string }) {
   const [state, setState] = useState<LoadState>("loading");
-  const [billing, setBilling] = useState<BillingState>(null);
-  const [busy, setBusy] = useState<ChargeType | null>(null);
+  const [status, setStatus] = useState<BillingStatus>(null);
+  const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -32,7 +30,9 @@ export default function ShopBilling({ shop }: { shop: string }) {
         setState("load-error");
         return;
       }
-      setBilling((body?.billing as BillingState) ?? null);
+      setStatus({
+        access: (body?.access as Access) ?? { full: false, expired: false },
+      });
       setState("loaded");
     } catch {
       setState("load-error");
@@ -46,14 +46,14 @@ export default function ShopBilling({ shop }: { shop: string }) {
     void load();
   }, [load]);
 
-  async function start(type: ChargeType) {
-    setBusy(type);
+  async function start() {
+    setBusy(true);
     setActionError(null);
     try {
       const res = await fetch("/api/shopify/billing/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop, type }),
+        body: JSON.stringify({ shop, type: "one_time" }),
       });
       const body = await res.json().catch(() => null);
       if (res.ok && body?.confirmationUrl) {
@@ -68,7 +68,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
     } catch {
       setActionError("Le serveur est injoignable.");
     }
-    setBusy(null);
+    setBusy(false);
   }
 
   if (state === "loading") {
@@ -98,57 +98,48 @@ export default function ShopBilling({ shop }: { shop: string }) {
     );
   }
 
-  const oneTimeActive = billing?.one_time_status === "active";
-  const subActive = billing?.subscription_status === "active";
+  const full = status?.access.full ?? false;
+  const expired = status?.access.expired ?? false;
 
   return (
     <div className="rounded-lg border border-line bg-paper p-4">
       <p className="tech-label text-faint">Facturation</p>
 
-      {(oneTimeActive || subActive) && (
+      {/* Full access active: single confirmation badge. */}
+      {full && (
         <div className="mt-2 flex flex-wrap gap-2">
-          {oneTimeActive && <Badge>Mise en conformite active</Badge>}
-          {subActive && <Badge>Surveillance active</Badge>}
+          <Badge>Acces complet actif - 30 jours</Badge>
         </div>
       )}
 
-      {/* No active payment: full offer (one-time primary + subscription). */}
-      {!oneTimeActive && !subActive && (
-        <div className="mt-3 flex flex-col gap-3">
-          <Offer
-            title="Debloquer la mise en conformite"
-            price="149 CHF - paiement unique via Shopify"
-            action="Debloquer"
-            variant="primary"
-            busy={busy === "one_time"}
-            disabled={busy !== null}
-            onClick={() => start("one_time")}
-          />
-          <div className="border-t border-line pt-3">
+      {/* Access expired (one-time charge older than 30 days). */}
+      {expired && (
+        <div className="mt-3 rounded-md border border-warn/40 bg-warn-soft/50 p-3">
+          <p className="text-sm text-ink">
+            Votre acces est expire. Relancez une mise en conformite pour
+            re-auditer cette boutique.
+          </p>
+          <div className="mt-3">
             <Offer
-              title="Surveillance continue"
-              price="29 CHF/mois - via Shopify"
-              action="Activer"
-              variant="secondary"
-              busy={busy === "subscription"}
-              disabled={busy !== null}
-              onClick={() => start("subscription")}
+              title="Relancer la mise en conformite"
+              price="149 CHF - paiement unique via Shopify"
+              action="Relancer"
+              busy={busy}
+              onClick={start}
             />
           </div>
         </div>
       )}
 
-      {/* One-time paid but no monitoring yet: offer the subscription. */}
-      {oneTimeActive && !subActive && (
-        <div className="mt-3 border-t border-line pt-3">
+      {/* No active access: the single one-time offer. */}
+      {!full && !expired && (
+        <div className="mt-3">
           <Offer
-            title="Surveillance continue"
-            price="29 CHF/mois - via Shopify"
-            action="Activer"
-            variant="secondary"
-            busy={busy === "subscription"}
-            disabled={busy !== null}
-            onClick={() => start("subscription")}
+            title="Debloquer la mise en conformite"
+            price="149 CHF - acces complet 30 jours via Shopify"
+            action="Debloquer"
+            busy={busy}
+            onClick={start}
           />
         </div>
       )}
@@ -171,23 +162,15 @@ function Offer({
   title,
   price,
   action,
-  variant,
   busy,
-  disabled,
   onClick,
 }: {
   title: string;
   price: string;
   action: string;
-  variant: "primary" | "secondary";
   busy: boolean;
-  disabled: boolean;
   onClick: () => void;
 }) {
-  const cls =
-    variant === "primary"
-      ? "bg-brand text-surface hover:bg-brand-ink"
-      : "border border-line-strong text-ink hover:bg-slate-soft";
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
@@ -197,8 +180,8 @@ function Offer({
       <button
         type="button"
         onClick={onClick}
-        disabled={disabled}
-        className={`tech-label shrink-0 rounded px-4 py-2 transition-colors disabled:opacity-60 ${cls}`}
+        disabled={busy}
+        className="tech-label shrink-0 rounded bg-brand px-4 py-2 text-surface transition-colors hover:bg-brand-ink disabled:opacity-60"
       >
         {busy ? "Redirection..." : action}
       </button>

@@ -23,6 +23,10 @@ async function ensureSchema(): Promise<void> {
       updated_at timestamptz default now()
     )
   `;
+  // When the one-time charge became active. Drives the 30-day full-access
+  // window (see lib/entitlements.ts). Self-heals if the manual migration
+  // (migrations/one_time_expiry.sql) has not run yet.
+  await sql`alter table billing_state add column if not exists one_time_purchased_at timestamptz`;
   ready = true;
 }
 
@@ -49,6 +53,7 @@ export type BillingState = {
   subscription_id: string | null;
   test_mode: boolean;
   updated_at: string;
+  one_time_purchased_at: string | null;
 };
 
 export async function getBillingState(
@@ -58,7 +63,8 @@ export async function getBillingState(
   const sql = db();
   const rows = (await sql`
     select shop, one_time_status, one_time_charge_id,
-           subscription_status, subscription_id, test_mode, updated_at
+           subscription_status, subscription_id, test_mode, updated_at,
+           one_time_purchased_at
     from billing_state
     where shop = ${shop}
   `) as BillingState[];
@@ -141,20 +147,34 @@ export async function writeSyncedState(
 ): Promise<void> {
   await ensureSchema();
   const sql = db();
+  // Stamp the purchase moment the first time we see the one-time charge active.
+  // On a fresh row it is now() when active, else null. On conflict we keep the
+  // existing timestamp only if the charge was already active (the same 30-day
+  // window continues); a new activation after a lapse opens a fresh window.
+  const purchasedAt = synced.oneTimeStatus === "active" ? new Date() : null;
   await sql`
     insert into billing_state (
       shop, one_time_status, one_time_charge_id,
-      subscription_status, subscription_id, updated_at
+      subscription_status, subscription_id, updated_at, one_time_purchased_at
     )
     values (
       ${shop}, ${synced.oneTimeStatus}, ${synced.oneTimeChargeId},
-      ${synced.subscriptionStatus}, ${synced.subscriptionId}, now()
+      ${synced.subscriptionStatus}, ${synced.subscriptionId}, now(), ${purchasedAt}
     )
     on conflict (shop) do update
       set one_time_status = excluded.one_time_status,
           one_time_charge_id = excluded.one_time_charge_id,
           subscription_status = excluded.subscription_status,
           subscription_id = excluded.subscription_id,
-          updated_at = now()
+          updated_at = now(),
+          one_time_purchased_at = case
+            when ${synced.oneTimeStatus} = 'active' then
+              coalesce(
+                case when billing_state.one_time_status = 'active'
+                  then billing_state.one_time_purchased_at end,
+                now()
+              )
+            else billing_state.one_time_purchased_at
+          end
   `;
 }
