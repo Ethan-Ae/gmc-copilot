@@ -65,6 +65,49 @@ export default function PrivacyPage() {
             </p>
           </Section>
 
+          <Section title="Partage des donnees avec des tiers">
+            <p>
+              Feedcompliant ne vend ni ne loue aucune donnee. Les donnees Google
+              (donnees Merchant Center accedees en lecture via l&apos;API
+              Content) ne sont partagees avec aucun tiers a des fins commerciales
+              ou publicitaires.
+            </p>
+            <p className="mt-3">
+              Nous faisons appel a des sous-traitants techniques, strictement
+              necessaires au fonctionnement du service :
+            </p>
+            <ul className="mt-3 space-y-3">
+              <Item>
+                Vercel Inc. : hebergement de l&apos;application et execution du
+                code serveur.
+              </Item>
+              <Item>
+                Neon Inc. : base de donnees Postgres, stockage des donnees du
+                compte et des rapports.
+              </Item>
+              <Item>
+                Anthropic PBC : traitement des donnees d&apos;audit par modele de
+                langage pour generer les rapports. Les donnees Merchant Center
+                brutes ne sont transmises que dans la mesure necessaire a
+                l&apos;analyse.
+              </Item>
+              <Item>
+                Clerk Inc. : authentification des comptes utilisateurs.
+              </Item>
+              <Item>
+                Shopify Inc. : facturation et connexion boutique, dans le cadre
+                de l&apos;app Shopify.
+              </Item>
+            </ul>
+            <p className="mt-3">
+              Aucune donnee Google n&apos;est transmise a d&apos;autres tiers que
+              ces sous-traitants, et aucune donnee Google n&apos;est utilisee a
+              des fins publicitaires. Notre usage des donnees Google respecte la
+              Google API Services User Data Policy, y compris ses exigences
+              Limited Use.
+            </p>
+          </Section>
+
           <Section title="Donnees Google et Limited Use">
             <p>
               Les donnees Google obtenues via les API Google respectent la{" "}
@@ -78,6 +121,34 @@ export default function PrivacyPage() {
               </a>
               , y compris ses exigences Limited Use.
             </p>
+          </Section>
+
+          <Section title="Protection des donnees">
+            <ul className="space-y-3">
+              <Item>
+                Chiffrement en transit : tous les echanges passent par TLS/HTTPS,
+                y compris avec les API Google et Shopify.
+              </Item>
+              <Item>
+                Chiffrement au repos : notre base de donnees (Neon) chiffre les
+                donnees stockees.
+              </Item>
+              <Item>
+                Jetons d&apos;acces Google et Shopify stockes uniquement cote
+                serveur, jamais exposes au navigateur, avec un acces restreint a
+                l&apos;application.
+              </Item>
+              <Item>
+                Moindre privilege : nous n&apos;accedons qu&apos;au strict
+                necessaire, et le scope Google utilise est en lecture seule.
+              </Item>
+              <Item>
+                Revocation et suppression : tu peux revoquer l&apos;acces Google
+                a tout moment depuis ton compte Google. La suppression des
+                donnees est detaillee dans la section Conservation et suppression
+                ci-dessous.
+              </Item>
+            </ul>
           </Section>
 
           <Section title="Conservation et suppression">
