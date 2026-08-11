@@ -6,6 +6,7 @@ import {
   ShopifyReauthRequired,
 } from "../../../../lib/shopifyToken";
 import { getFixById, markReverted } from "../../../../lib/fixHistory";
+import { getEntitlements } from "../../../../lib/entitlements";
 import { norm, resolveTarget, type Patch } from "../../../../lib/shopifyFix";
 
 export const runtime = "nodejs";
@@ -38,6 +39,22 @@ export async function POST(req: NextRequest) {
   if (!fix) {
     return jsonResponse({ error: "not_found" }, { status: 404 });
   }
+
+  // Undo writes previous_value back into Shopify, so it is a Shopify write and
+  // must sit behind the same full-access gate as apply. An expired shop cannot
+  // mutate the store (even to roll a change back) until it re-runs a compliance.
+  const entitlements = await getEntitlements(userId, fix.shop);
+  if (!entitlements.canApplyFixes) {
+    return jsonResponse(
+      {
+        error: "acces_expire",
+        message:
+          "Votre acces est expire. Relancez une mise en conformite pour appliquer des correctifs.",
+      },
+      { status: 403 },
+    );
+  }
+
   if (fix.reverted_at) {
     return jsonResponse({ error: "already_reverted" }, { status: 409 });
   }

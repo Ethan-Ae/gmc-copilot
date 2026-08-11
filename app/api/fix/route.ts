@@ -52,14 +52,21 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "forbidden" }, { status: 403 });
   }
 
-  // (b bis) Applying a fix writes to Shopify: gate it on the shop's
-  // entitlements (Shopify Billing or legacy pro). Preview stays open to every
-  // plan so free users can still see the proposed change.
-  if (mode === "apply") {
-    const entitlements = await getEntitlements(userId, shop);
-    if (!entitlements.canApplyFixes) {
-      return jsonResponse({ error: "upgrade_required" }, { status: 403 });
-    }
+  // (b bis) The whole fix workflow - preview and apply - is gated on the shop's
+  // full-access entitlement (active one-time charge, or legacy pro).
+  // canApplyFixes is true only for those sources, so an expired or never-paid
+  // shop is refused here: no Shopify read-back or write can happen without
+  // active full access. Audits keep their own free quota and are unaffected.
+  const entitlements = await getEntitlements(userId, shop);
+  if (!entitlements.canApplyFixes) {
+    return jsonResponse(
+      {
+        error: "acces_expire",
+        message:
+          "Votre acces est expire. Relancez une mise en conformite pour appliquer des correctifs.",
+      },
+      { status: 403 },
+    );
   }
 
   // (c) fixType allowlist. autoApplicable is deliberately ignored here.

@@ -299,7 +299,8 @@ function ResultView({
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
   );
   // Fix actions require full rights. When entitlements are absent (older
-  // response), default to allowed - the /api/fix route still enforces apply.
+  // response), default to allowed - the /api/fix route still enforces access
+  // server-side, so a stale-true here is refused with a 403 on click.
   const canApplyFixes = data.entitlements?.canApplyFixes ?? true;
 
   return (
@@ -439,22 +440,44 @@ function IssueCard({
   );
 }
 
-// Shown in place of the preview/apply buttons when the audited shop has no full
-// rights. The report itself stays fully visible; only the write actions are
-// gated behind the dashboard payment block.
+// Shown when the audited shop has no full access (never unlocked, or the 30-day
+// window has elapsed). The report itself stays fully visible; only the write
+// workflow is gated. The Previsualiser/Appliquer buttons are rendered disabled
+// beside the same expired-access banner the dashboard uses. The /api/fix route
+// enforces this server-side regardless of what the UI renders.
 function FixLocked() {
   return (
     <div className="mt-4 border-t border-line pt-4">
-      <p className="text-sm text-muted">
-        La correction automatique est reservee aux boutiques ayant debloque la
-        mise en conformite.
-      </p>
-      <Link
-        href="/dashboard"
-        className="tech-label mt-3 inline-block rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
-      >
-        Debloquer la mise en conformite
-      </Link>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          className="border border-line-strong text-ink font-medium rounded-md px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
+        >
+          Previsualiser
+        </button>
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          className="bg-brand text-paper font-medium rounded-md px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
+        >
+          Appliquer
+        </button>
+      </div>
+      <div className="mt-3 rounded-md border border-warn/40 bg-warn-soft/50 p-3">
+        <p className="text-sm text-ink">
+          Votre acces est expire. Relancez une mise en conformite pour appliquer
+          des correctifs.
+        </p>
+        <Link
+          href="/dashboard"
+          className="tech-label mt-3 inline-block rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
+        >
+          Relancer la mise en conformite
+        </Link>
+      </div>
     </div>
   );
 }
@@ -485,9 +508,10 @@ function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
   const userErrorsText = (body: unknown): string => {
     const errs = (body as { userErrors?: { message: string }[] })?.userErrors;
     if (errs?.length) return errs.map((e) => e.message).join(" ");
-    const detail = (body as { detail?: string; error?: string })?.detail;
-    const error = (body as { error?: string })?.error;
-    return detail || error || "Une erreur est survenue.";
+    // Prefer a human message (e.g. the 403 acces_expire payload) over the raw
+    // error slug, so a gated response reads cleanly instead of showing a code.
+    const b = body as { message?: string; detail?: string; error?: string };
+    return b?.message || b?.detail || b?.error || "Une erreur est survenue.";
   };
 
   const preview = async () => {
