@@ -209,8 +209,8 @@ function Hero({
         </h1>
 
         <p className="mt-6 text-lg text-paper-dim max-w-xl leading-relaxed">
-          Feedcompliant inspecte ta boutique Shopify comme le fait la review
-          Google : chaque promesse affichee est confrontee a tes policies, tes
+          Feedcompliant inspecte ta boutique Shopify avec la severite d&apos;un
+          auditeur GMC : chaque promesse affichee est confrontee a tes policies, tes
           reglages et tes fiches produit. Tu recois la liste de ce qui risque de
           bloquer, puis les correctifs prets a appliquer.
         </p>
