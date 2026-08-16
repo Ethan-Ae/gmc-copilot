@@ -204,15 +204,15 @@ function Hero({
         <h1 className="text-[2rem] sm:text-5xl font-semibold tracking-tight leading-[1.1] max-w-2xl">
           Google a refuse ton compte.
           <span className="block text-paper-dim">
-            On te dit exactement quelle phrase le declenche.
+            On te montre tout ce qui peut le declencher - et on le corrige.
           </span>
         </h1>
 
         <p className="mt-6 text-lg text-paper-dim max-w-xl leading-relaxed">
           Feedcompliant inspecte ta boutique Shopify comme le fait la review
           Google : chaque promesse affichee est confrontee a tes policies, tes
-          reglages et tes fiches produit. Tu recois la liste de ce qui bloque,
-          puis les correctifs prets a appliquer.
+          reglages et tes fiches produit. Tu recois la liste de ce qui risque de
+          bloquer, puis les correctifs prets a appliquer.
         </p>
 
         {/* Audit form */}
@@ -407,7 +407,7 @@ function LockedPaywall({ remaining }: { remaining: number }) {
             </div>
             <p className="mt-3 text-ink leading-relaxed">
               Probleme de conformite detecte sur ta boutique, avec le correctif
-              exact a appliquer en un clic pour passer la review Google.
+              a appliquer en un clic avant de redemander la review Google.
             </p>
             <div className="mt-4 border-l-2 border-l-brand bg-brand-soft/70 rounded-r-md px-4 py-3">
               <p className="tech-label text-brand mb-1">Correctif</p>
@@ -444,7 +444,7 @@ function LockedPaywall({ remaining }: { remaining: number }) {
 }
 
 // Reassuring block for a store already in good shape (<= 2 problems). No blur:
-// the message is that a full audit confirms there is nothing blocking left.
+// the message is that a full audit covers the surfaces the teaser cannot see.
 function PositiveUpsell({ issueCount }: { issueCount: number }) {
   const body =
     issueCount === 0
@@ -453,7 +453,7 @@ function PositiveUpsell({ issueCount }: { issueCount: number }) {
           issueCount > 1 ? "s" : ""
         } mineur${
           issueCount > 1 ? "s" : ""
-        }. Un audit complet confirme qu'aucun blocage ne reste avant ta review GMC.`;
+        }. Un audit complet couvre aussi tes donnees produit et ton statut Merchant Center avant ta review GMC.`;
   return (
     <div className="rounded-lg border border-go/40 bg-go-soft/50 p-6 text-center sm:text-left">
       <p className="tech-label text-go mb-2">Bonne nouvelle</p>
@@ -465,7 +465,7 @@ function PositiveUpsell({ issueCount }: { issueCount: number }) {
         href="/pricing"
         className="inline-flex mt-6 bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
       >
-        Obtenir la validation complete &rarr; Tarifs
+        Obtenir l&apos;audit complet &rarr; Tarifs
       </Link>
     </div>
   );
