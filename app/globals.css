@@ -19,6 +19,13 @@
   --color-brand-ink: #0a4343;
   --color-brand-soft: #e5f0ef;
 
+  /* Dark console band: inverted surfaces used by the landing hero. */
+  --color-ink-soft: #1b1f26;
+  --color-ink-line: #2b313b;
+  --color-paper-dim: #a9b1be;
+  --color-paper-faint: #737d8c;
+  --color-brand-lite: #63b3ab;
+
   --color-go: #1a7f52;
   --color-go-soft: #e7f4ec;
   --color-warn: #9a5a00;
@@ -58,6 +65,39 @@ body {
   letter-spacing: 0.12em;
   font-size: 0.6875rem;
   font-weight: 500;
+}
+
+/* Engineering-drawing grid, used behind the dark hero band. */
+.grid-field {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(
+    120% 80% at 50% 0%,
+    #000 25%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(120% 80% at 50% 0%, #000 25%, transparent 78%);
+}
+
+/* Petrol halo sitting behind the hero headline. */
+.brand-halo {
+  background: radial-gradient(
+    60% 55% at 22% 18%,
+    rgba(99, 179, 171, 0.16),
+    transparent 70%
+  );
+}
+
+/* Hairline rule that fades out, used to close sections. */
+.rule-fade {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    var(--color-line-strong),
+    transparent 85%
+  );
 }
 
 /* Scanning indicator used on the loading state. */
