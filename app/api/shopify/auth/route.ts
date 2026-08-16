@@ -17,21 +17,15 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // A merchant installing from Shopify lands here without an account yet, so
-  // carry the shop through sign-in and come back to finish the OAuth start.
+  // No sign-in gate here: Shopify requires its authorization screen to be the
+  // first thing an installing merchant sees. When there is no session yet the
+  // callback stores the shop unclaimed and the account is linked after sign-up.
   const { userId } = await auth();
-  if (!userId) {
-    const signIn = new URL("/sign-in", req.nextUrl.origin);
-    signIn.searchParams.set(
-      "redirect_url",
-      `/api/shopify/auth?shop=${encodeURIComponent(shop)}`,
-    );
-    return NextResponse.redirect(signIn);
-  }
 
-  // Anti-CSRF random lives in the cookie; the full state carries the userId too.
+  // Anti-CSRF random lives in the cookie; the full state carries the userId when
+  // we already have one (merchant connecting from their dashboard).
   const randomHex = crypto.randomBytes(16).toString("hex");
-  const state = `${randomHex}.${userId}`;
+  const state = `${randomHex}.${userId ?? ""}`;
   const redirectUri = `${appUrl}/api/shopify/callback`;
 
   const authUrl =

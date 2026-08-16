@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../lib/apiJson";
 import { getEnv, isValidShop, verifyHmac } from "../../../../lib/shopify";
+import {
+  PENDING_SHOP_COOKIE,
+  PENDING_SHOP_TTL_SECONDS,
+  signPendingShop,
+} from "../../../../lib/pendingShopClaim";
 import { persistOAuthTokens } from "../../../../lib/shopifyToken";
 
 export const runtime = "nodejs";
@@ -18,19 +24,17 @@ export async function GET(req: NextRequest) {
     return jsonResponse({ error: "Missing shop or code" }, { status: 400 });
   }
 
-  // state = `${randomHex}.${userId}`; randomHex is checked against the cookie
-  // and the userId must be the one embedded at /api/shopify/auth start.
+  // state = `${randomHex}.${userId}`; randomHex is checked against the cookie.
+  // The userId part is empty for an App Store install started without a session.
   const [randomHex, ...userIdParts] = (state ?? "").split(".");
-  const userId = userIdParts.join(".") || null;
+  const stateUserId = userIdParts.join(".") || null;
   if (!randomHex || !cookieState || randomHex !== cookieState) {
     return jsonResponse({ error: "Invalid state" }, { status: 403 });
   }
-  if (!userId) {
-    return jsonResponse(
-      { error: "Missing user in state" },
-      { status: 403 },
-    );
-  }
+
+  // Prefer the userId captured when the flow started; fall back to a live
+  // session for a merchant who happens to be signed in already.
+  const userId = stateUserId ?? (await auth()).userId ?? null;
   if (!verifyHmac(params, apiSecret)) {
     return jsonResponse({ error: "Invalid HMAC" }, { status: 403 });
   }
@@ -64,6 +68,25 @@ export async function GET(req: NextRequest) {
   // Persist the token pair + expirations so the connection survives without
   // reinstalling and can be refreshed server-side.
   await persistOAuthTokens(shop, tokenJson.scope ?? null, userId, tokenJson);
+
+  // Installed without an account: the row stays orphaned (user_id NULL) and a
+  // signed, short-lived cookie carries the shop through sign-up, where
+  // /api/shopify/claim attaches it. Sign-up rather than sign-in because an App
+  // Store merchant is a new user; Clerk shows the sign-in link on that page.
+  if (!userId) {
+    const signUpUrl = new URL("/sign-up", req.nextUrl.origin);
+    signUpUrl.searchParams.set("redirect_url", "/dashboard");
+    const res = NextResponse.redirect(signUpUrl, { status: 303 });
+    res.cookies.delete("shopify_oauth_state");
+    res.cookies.set(PENDING_SHOP_COOKIE, signPendingShop(shop), {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: PENDING_SHOP_TTL_SECONDS,
+    });
+    return res;
+  }
 
   // Connection done: hand the merchant back to their dashboard.
   const dashboardUrl = new URL("/dashboard", req.nextUrl.origin);

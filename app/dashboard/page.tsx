@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { getShopsForUser } from "../../lib/db";
+import { PENDING_SHOP_COOKIE } from "../../lib/pendingShopClaim";
 import { getAuditsForUser, type AuditRow } from "../../lib/audits";
 import { getMerchantSelectionForUser } from "../../lib/googleStore";
 import ConnectShopify from "./ConnectShopify";
@@ -41,6 +44,15 @@ export default async function DashboardPage({
   searchParams: Promise<{ google?: string; billing?: string }>;
 }) {
   const { userId } = await auth();
+
+  // A shop installed from the App Store before sign-up waits on a signed
+  // cookie. Hand it to the claim route, which owns the write and clears the
+  // cookie, then comes straight back here. No cookie means nothing changes.
+  if (userId) {
+    const pending = (await cookies()).get(PENDING_SHOP_COOKIE);
+    if (pending) redirect("/api/shopify/claim");
+  }
+
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? "inconnu";
 

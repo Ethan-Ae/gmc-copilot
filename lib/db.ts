@@ -61,6 +61,29 @@ export async function getShopOwner(shop: string): Promise<string | null> {
   return rows.length ? rows[0].user_id : null;
 }
 
+export type ShopClaimResult = "claimed" | "already-owned" | "not-found";
+
+// Attach a shop installed before sign-up to the account that just signed up.
+// The `user_id is null` guard is the security boundary: a shop already owned by
+// someone else is never reassigned, whatever cookie was presented.
+export async function claimOrphanShop(
+  shop: string,
+  userId: string,
+): Promise<ShopClaimResult> {
+  await ensureSchema();
+  const sql = db();
+  const claimed = (await sql`
+    update shops
+      set user_id = ${userId}, updated_at = now()
+    where shop = ${shop} and user_id is null
+    returning shop
+  `) as { shop: string }[];
+  if (claimed.length) return "claimed";
+
+  const owner = await getShopOwner(shop);
+  return owner === null ? "not-found" : "already-owned";
+}
+
 export async function getShopsForUser(
   userId: string,
 ): Promise<{ shop: string; updated_at: string }[]> {
