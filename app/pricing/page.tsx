@@ -95,10 +95,10 @@ function OfferCard({ offer }: { offer: Offer }) {
     : "border-line border bg-paper";
   return (
     <div
-      className={`relative flex flex-col rounded-2xl ${shell} p-6`}
+      className={`relative flex flex-col rounded-3xl ${shell} p-6`}
     >
       {offer.highlight && (
-        <span className="absolute -top-3 left-6 tech-label rounded-full bg-brand px-2 py-1 text-surface">
+        <span className="absolute -top-3 left-6 tech-label rounded-full bg-ink px-2 py-1 text-paper">
           Recommande
         </span>
       )}

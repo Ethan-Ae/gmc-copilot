@@ -247,7 +247,7 @@ function Hero({
         </div>
 
         {/* Factual signal row */}
-        <dl className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-px bg-ink-line border border-ink-line rounded-2xl overflow-hidden">
+        <dl className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-px bg-ink-line border border-ink-line rounded-3xl overflow-hidden">
           {[
             { k: "30 s", v: "Verdict go / no-go" },
             { k: "10 domaines", v: "Vitrine, policies, produits" },
@@ -319,7 +319,7 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
     <div className="rise space-y-6">
       {/* Verdict panel */}
       <div
-        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-2xl p-6`}
+        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-3xl p-6`}
       >
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -353,7 +353,7 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
           return (
             <li
               key={i}
-              className={`bg-surface border border-line ${sev.rail} border-l-4 rounded-2xl p-5`}
+              className={`bg-surface border border-line ${sev.rail} border-l-4 rounded-3xl p-5`}
             >
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`tech-label rounded-full px-2 py-1 ${sev.chip}`}>
@@ -386,7 +386,7 @@ function Upsell({ issueCount }: { issueCount: number }) {
 // the detailed fixes), topped by the upgrade CTA.
 function LockedPaywall({ remaining }: { remaining: number }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-line-strong">
+    <div className="relative overflow-hidden rounded-3xl border border-line-strong">
       {/* Blurred, non-interactive teaser of the locked content */}
       <div
         className="space-y-4 p-5 blur-sm select-none pointer-events-none"
@@ -395,7 +395,7 @@ function LockedPaywall({ remaining }: { remaining: number }) {
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="bg-surface border border-line border-l-4 border-l-slate rounded-2xl p-5"
+            className="bg-surface border border-line border-l-4 border-l-slate rounded-3xl p-5"
           >
             <div className="flex gap-2">
               <span className="tech-label rounded-full px-2 py-1 bg-nogo-soft text-nogo">
@@ -455,7 +455,7 @@ function PositiveUpsell({ issueCount }: { issueCount: number }) {
           issueCount > 1 ? "s" : ""
         }. Un audit complet couvre aussi tes donnees produit et ton statut Merchant Center avant ta review GMC.`;
   return (
-    <div className="rounded-2xl border border-go/40 bg-go-soft/50 p-6 text-center sm:text-left">
+    <div className="rounded-3xl border border-go/40 bg-go-soft/50 p-6 text-center sm:text-left">
       <p className="tech-label text-go mb-2">Bonne nouvelle</p>
       <h3 className="text-xl font-semibold tracking-tight">
         Ta boutique est deja solide
@@ -543,7 +543,7 @@ function WhyRefused() {
           {CAUSES.map((c) => (
             <div
               key={c.n}
-              className="border border-line rounded-2xl bg-surface p-5"
+              className="border border-line rounded-3xl bg-surface p-5"
             >
               <p className="tech-label text-nogo mb-3">{c.n}</p>
               <h3 className="font-semibold tracking-tight leading-snug">
@@ -621,7 +621,7 @@ function AuditScope() {
           lead="Le meme perimetre que celui d'un auditeur qui cherche une seule incoherence. Rien n'est declare conforme sans preuve visible sur ton site."
         />
 
-        <ul className="mt-10 grid gap-px bg-line border border-line rounded-2xl overflow-hidden sm:grid-cols-2">
+        <ul className="mt-10 grid gap-px bg-line border border-line rounded-3xl overflow-hidden sm:grid-cols-2">
           {SCOPE.map((s, i) => (
             <li key={s.area} className="bg-surface p-5">
               <div className="flex items-baseline gap-3">
@@ -669,7 +669,7 @@ function HowItWorks() {
           title="Trois etapes, de la panne au feu vert."
         />
 
-        <ol className="mt-10 space-y-px bg-ink-line border border-ink-line rounded-2xl overflow-hidden">
+        <ol className="mt-10 space-y-px bg-ink-line border border-ink-line rounded-3xl overflow-hidden">
           {STEPS.map((s) => (
             <li key={s.n} className="bg-ink-soft p-6 sm:flex sm:gap-6">
               <p className="tech-label text-brand-lite sm:w-16 shrink-0 mb-3 sm:mb-0 sm:pt-1">
@@ -700,7 +700,7 @@ function PricingStrip() {
         />
 
         <div className="mt-10 grid gap-6 md:grid-cols-2 items-stretch">
-          <div className="flex flex-col border border-line rounded-2xl bg-surface p-6">
+          <div className="flex flex-col border border-line rounded-3xl bg-surface p-6">
             <p className="tech-label text-faint mb-2">Gratuit</p>
             <h3 className="text-xl font-semibold tracking-tight">
               Audit express
@@ -738,8 +738,8 @@ function PricingStrip() {
             </a>
           </div>
 
-          <div className="relative flex flex-col border border-brand/50 rounded-2xl bg-surface p-6">
-            <span className="absolute -top-3 left-6 tech-label rounded-full bg-brand px-2 py-1 text-surface">
+          <div className="relative flex flex-col border border-brand/50 rounded-3xl bg-surface p-6">
+            <span className="absolute -top-3 left-6 tech-label rounded-full bg-ink px-2 py-1 text-paper">
               Recommande
             </span>
             <p className="tech-label text-brand mb-2">One-shot</p>
@@ -834,7 +834,7 @@ function FinalCta() {
   return (
     <section className="border-t border-line bg-paper">
       <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:py-20">
-        <div className="rounded-2xl border border-line-strong bg-surface p-8 sm:p-10 text-center">
+        <div className="rounded-3xl border border-line-strong bg-surface p-8 sm:p-10 text-center">
           <p className="tech-label text-brand mb-4">Commence ici</p>
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-tight max-w-xl mx-auto">
             Savoir ce qui bloque prend 30 secondes.

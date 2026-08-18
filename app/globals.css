@@ -4,7 +4,7 @@
 /*
   Design system: "technical inspection console", deep-black edition.
   Stacked blacks with a faint petrol cast, off-white ink, one desaturated
-  petrol accent kept for labels and rails, IBM Plex type. Primary actions
+  petrol accent kept for labels and rails, Geist type. Primary actions
   are off-white pills; relief comes from stacked background tones and white
   hairlines at low opacity - never from heavy shadows or bright fills.
 
@@ -40,8 +40,8 @@
   --color-slate: #8f9a99;
   --color-slate-soft: #151a1c;
 
-  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 html {

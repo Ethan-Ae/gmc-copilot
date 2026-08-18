@@ -307,7 +307,7 @@ function ResultView({
     <div className="rise space-y-8">
       {/* Verdict panel */}
       <section
-        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-2xl p-6`}
+        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-3xl p-6`}
       >
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -351,7 +351,7 @@ function ResultView({
           Problemes detectes ({issues.length})
         </h2>
         {issues.length === 0 ? (
-          <p className="bg-surface border border-line rounded-2xl p-6 text-muted">
+          <p className="bg-surface border border-line rounded-3xl p-6 text-muted">
             Aucun probleme detecte sur les donnees inspectees.
           </p>
         ) : (
@@ -404,7 +404,7 @@ function IssueCard({
 }) {
   const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
   return (
-    <li className="bg-surface border border-line rounded-2xl p-5">
+    <li className="bg-surface border border-line rounded-3xl p-5">
       <div className="flex items-center gap-2 flex-wrap">
         <span className={`tech-label rounded-full px-2 py-1 ${sev.chip}`}>
           {sev.label}

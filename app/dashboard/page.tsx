@@ -129,7 +129,7 @@ export default async function DashboardPage({
             Aucune boutique connectée pour l&apos;instant.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-surface">
+          <ul className="mt-3 divide-y divide-line rounded-3xl border border-line bg-surface">
             {shops.map((s) => (
               <li key={s.shop} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-4">
@@ -160,7 +160,7 @@ export default async function DashboardPage({
         {audits.length === 0 ? (
           <p className="mt-2 text-muted">Aucun audit enregistré.</p>
         ) : (
-          <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-surface">
+          <ul className="mt-3 divide-y divide-line rounded-3xl border border-line bg-surface">
             {audits.map((a) => {
               const v = verdict(a.overall);
               return (
