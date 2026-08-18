@@ -42,7 +42,7 @@ export default function MerchantAccountPicker({
   }
 
   return (
-    <div className="mt-2 rounded-lg border border-warn/40 bg-warn-soft/50 p-4">
+    <div className="mt-2 rounded-2xl border border-warn/40 bg-warn-soft/50 p-4">
       <p className="text-ink">
         Plusieurs comptes Merchant Center sont accessibles avec ce compte
         Google. Choisis celui a auditer.
@@ -51,7 +51,7 @@ export default function MerchantAccountPicker({
         {accounts.map((a) => (
           <label
             key={a.id}
-            className="flex items-center gap-3 rounded border border-line bg-surface px-3 py-2"
+            className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2"
           >
             <input
               type="radio"
@@ -70,7 +70,7 @@ export default function MerchantAccountPicker({
         type="button"
         onClick={save}
         disabled={saving || !selected}
-        className="tech-label mt-3 rounded bg-brand px-4 py-2 text-surface hover:bg-brand-ink disabled:opacity-60"
+        className="tech-label mt-3 rounded-full bg-ink px-4 py-2 text-paper hover:bg-white disabled:opacity-60"
       >
         {saving ? "Enregistrement..." : "Utiliser ce compte"}
       </button>

@@ -74,7 +74,7 @@ export default async function DashboardPage({
       <h1 className="mt-2 text-2xl font-semibold text-ink">Tableau de bord</h1>
 
       {billingReturned && (
-        <div className="mt-4 rounded-lg border border-go/40 bg-go-soft/60 p-4">
+        <div className="mt-4 rounded-2xl border border-go/40 bg-go-soft/60 p-4">
           <p className="text-ink">
             Retour de Shopify pris en compte. L&apos;etat de facturation
             ci-dessous est a jour.
@@ -92,7 +92,7 @@ export default async function DashboardPage({
         <div>
           <Link
             href="/api/google/auth"
-            className="tech-label self-start rounded border border-line-strong px-4 py-2 text-ink hover:bg-slate-soft inline-block"
+            className="tech-label self-start rounded-full border border-line-strong px-4 py-2 text-ink hover:bg-slate-soft inline-block"
           >
             Connecter Google Merchant Center
           </Link>
@@ -105,7 +105,7 @@ export default async function DashboardPage({
           )}
 
           {noMerchantAccount && (
-            <div className="mt-2 rounded-lg border border-nogo/40 bg-nogo-soft/50 p-4">
+            <div className="mt-2 rounded-2xl border border-nogo/40 bg-nogo-soft/50 p-4">
               <p className="text-ink">
                 Aucun compte Merchant Center n&apos;est associe a ce compte
                 Google. Connecte un compte Google qui administre un compte
@@ -129,7 +129,7 @@ export default async function DashboardPage({
             Aucune boutique connectée pour l&apos;instant.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
+          <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-surface">
             {shops.map((s) => (
               <li key={s.shop} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-4">
@@ -141,7 +141,7 @@ export default async function DashboardPage({
                   </div>
                   <a
                     href={`/report?shop=${encodeURIComponent(s.shop.trim())}`}
-                    className="tech-label rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
+                    className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white"
                   >
                     Auditer
                   </a>
@@ -160,7 +160,7 @@ export default async function DashboardPage({
         {audits.length === 0 ? (
           <p className="mt-2 text-muted">Aucun audit enregistré.</p>
         ) : (
-          <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
+          <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-surface">
             {audits.map((a) => {
               const v = verdict(a.overall);
               return (

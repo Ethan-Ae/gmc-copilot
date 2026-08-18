@@ -36,7 +36,30 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider appearance={{ cssLayerName: "clerk" }}>
+    // Clerk widgets follow the dark system. Values mirror the tokens in
+    // app/globals.css - keep both in sync when the palette moves.
+    <ClerkProvider
+      appearance={{
+        cssLayerName: "clerk",
+        variables: {
+          colorBackground: "#0d1113",
+          colorForeground: "#e8ebea",
+          colorMutedForeground: "#9fa9a7",
+          colorPrimary: "#e8ebea",
+          colorPrimaryForeground: "#060809",
+          colorInput: "#14191b",
+          colorInputForeground: "#e8ebea",
+          colorNeutral: "#e8ebea",
+          colorBorder: "rgba(255, 255, 255, 0.1)",
+          colorShadow: "rgba(0, 0, 0, 0.55)",
+          colorModalBackdrop: "#000000",
+          colorDanger: "#d17468",
+          colorSuccess: "#5bb287",
+          colorWarning: "#c99f55",
+          borderRadius: "0.75rem",
+        },
+      }}
+    >
       <html
         lang="fr"
         className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
@@ -54,7 +77,7 @@ export default function RootLayout({
                   </button>
                 </SignInButton>
                 <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
-                  <button className="tech-label rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink">
+                  <button className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white">
                     Inscription
                   </button>
                 </SignUpButton>

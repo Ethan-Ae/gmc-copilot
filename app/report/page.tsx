@@ -133,9 +133,9 @@ const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
 
 function Masthead({ shop }: { shop?: string }) {
   return (
-    <header className="border-b border-line bg-ink text-paper">
+    <header className="border-b border-line bg-surface text-ink">
       <div className="mx-auto w-full max-w-3xl px-5 py-3 flex items-center justify-between gap-4">
-        <Link href="/" className="tech-label text-paper">
+        <Link href="/" className="tech-label text-ink">
           Feedcompliant
         </Link>
         <span className="tech-label text-faint truncate">
@@ -246,7 +246,7 @@ function NotConnectedView({ shop }: { shop: string }) {
       {shop && (
         <a
           href={`/api/shopify/auth?shop=${encodeURIComponent(shop)}`}
-          className="inline-flex mt-8 bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
+          className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
         >
           Connecter Shopify
         </a>
@@ -268,7 +268,7 @@ function ErrorView({
       <h1 className="text-2xl font-semibold tracking-tight">
         L&apos;audit n&apos;a pas abouti.
       </h1>
-      <p className="mt-4 border-l-2 border-l-nogo bg-nogo-soft/60 rounded-r-md px-4 py-3 font-mono text-sm text-ink">
+      <p className="mt-4 border-l-2 border-l-nogo bg-nogo-soft/60 rounded-r-xl px-4 py-3 font-mono text-sm text-ink">
         {message}
       </p>
       <p className="mt-4 text-muted leading-relaxed">
@@ -278,7 +278,7 @@ function ErrorView({
       </p>
       <button
         onClick={onRetry}
-        className="mt-8 bg-ink hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
+        className="mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
       >
         Reessayer
       </button>
@@ -307,7 +307,7 @@ function ResultView({
     <div className="rise space-y-8">
       {/* Verdict panel */}
       <section
-        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-lg p-6`}
+        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-2xl p-6`}
       >
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -324,7 +324,7 @@ function ResultView({
           </div>
           <button
             onClick={onRetry}
-            className="shrink-0 border border-line-strong hover:border-brand hover:text-brand text-ink font-medium rounded-md px-4 py-2 text-sm transition-colors"
+            className="shrink-0 border border-line-strong hover:border-brand hover:text-brand text-ink font-medium rounded-full px-4 py-2 text-sm transition-colors"
           >
             Relancer l&apos;audit
           </button>
@@ -351,7 +351,7 @@ function ResultView({
           Problemes detectes ({issues.length})
         </h2>
         {issues.length === 0 ? (
-          <p className="bg-surface border border-line rounded-lg p-6 text-muted">
+          <p className="bg-surface border border-line rounded-2xl p-6 text-muted">
             Aucun probleme detecte sur les donnees inspectees.
           </p>
         ) : (
@@ -378,7 +378,7 @@ function ResultView({
             {audit.checked.map((c, i) => (
               <li
                 key={i}
-                className="inline-flex items-center gap-2 bg-surface border border-line rounded-md px-3 py-1.5 font-mono text-xs text-muted"
+                className="inline-flex items-center gap-2 bg-surface border border-line rounded-full px-3 py-1.5 font-mono text-xs text-muted"
               >
                 <span className="text-go" aria-hidden="true">
                   &#10003;
@@ -404,17 +404,17 @@ function IssueCard({
 }) {
   const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
   return (
-    <li className="bg-surface border border-line rounded-lg p-5">
+    <li className="bg-surface border border-line rounded-2xl p-5">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className={`tech-label rounded px-2 py-1 ${sev.chip}`}>
+        <span className={`tech-label rounded-full px-2 py-1 ${sev.chip}`}>
           {sev.label}
         </span>
-        <span className="tech-label rounded px-2 py-1 bg-slate-soft text-slate">
+        <span className="tech-label rounded-full px-2 py-1 bg-slate-soft text-slate">
           {AREA_LABEL[issue.area] ?? issue.area}
         </span>
         {issue.source && SOURCE[issue.source] && (
           <span
-            className={`tech-label rounded px-2 py-1 ${SOURCE[issue.source].chip}`}
+            className={`tech-label rounded-full px-2 py-1 ${SOURCE[issue.source].chip}`}
           >
             {SOURCE[issue.source].label}
           </span>
@@ -426,7 +426,7 @@ function IssueCard({
         )}
       </div>
       <p className="mt-3 text-ink leading-relaxed">{issue.problem}</p>
-      <div className="mt-4 border-l-2 border-l-brand bg-brand-soft/70 rounded-r-md px-4 py-3">
+      <div className="mt-4 border-l-2 border-l-brand bg-brand-soft/70 rounded-r-xl px-4 py-3">
         <p className="tech-label text-brand mb-1">Correctif</p>
         <p className="text-ink leading-relaxed">{issue.fix}</p>
       </div>
@@ -453,7 +453,7 @@ function FixLocked() {
           type="button"
           disabled
           aria-disabled="true"
-          className="border border-line-strong text-ink font-medium rounded-md px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
+          className="border border-line-strong text-ink font-medium rounded-full px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
         >
           Previsualiser
         </button>
@@ -461,19 +461,19 @@ function FixLocked() {
           type="button"
           disabled
           aria-disabled="true"
-          className="bg-brand text-paper font-medium rounded-md px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
+          className="bg-ink text-paper font-medium rounded-full px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
         >
           Appliquer
         </button>
       </div>
-      <div className="mt-3 rounded-md border border-warn/40 bg-warn-soft/50 p-3">
+      <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
         <p className="text-sm text-ink">
           Votre acces est expire. Relancez une mise en conformite pour appliquer
           des correctifs.
         </p>
         <Link
           href="/dashboard"
-          className="tech-label mt-3 inline-block rounded bg-brand px-3 py-1.5 text-surface hover:bg-brand-ink"
+          className="tech-label mt-3 inline-block rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white"
         >
           Relancer la mise en conformite
         </Link>
@@ -604,14 +604,14 @@ function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
             <button
               onClick={preview}
               disabled={busy !== null}
-              className="border border-line-strong hover:border-brand hover:text-brand text-ink font-medium rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+              className="border border-line-strong hover:border-brand hover:text-brand text-ink font-medium rounded-full px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
             >
               {busy === "preview" ? "Chargement..." : "Previsualiser"}
             </button>
             <button
               onClick={apply}
               disabled={busy !== null}
-              className="bg-brand text-paper hover:bg-brand/90 font-medium rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+              className="bg-ink text-paper hover:bg-white font-medium rounded-full px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
             >
               {busy === "apply" ? "Application..." : "Appliquer"}
             </button>
@@ -621,7 +621,7 @@ function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
           <button
             onClick={() => revert(applied.fixId)}
             disabled={busy !== null}
-            className="border border-line-strong hover:border-nogo hover:text-nogo text-ink font-medium rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+            className="border border-line-strong hover:border-nogo hover:text-nogo text-ink font-medium rounded-full px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
           >
             {busy === "revert" ? "Annulation..." : "Annuler"}
           </button>

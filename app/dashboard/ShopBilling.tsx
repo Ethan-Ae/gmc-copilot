@@ -73,7 +73,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
 
   if (state === "loading") {
     return (
-      <div className="rounded-lg border border-line bg-paper p-4">
+      <div className="rounded-2xl border border-line bg-paper p-4">
         <p className="tech-label text-faint">Facturation</p>
         <p className="mt-2 text-sm text-muted">Chargement de l&apos;etat...</p>
       </div>
@@ -82,7 +82,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
 
   if (state === "load-error") {
     return (
-      <div className="rounded-lg border border-line bg-paper p-4">
+      <div className="rounded-2xl border border-line bg-paper p-4">
         <p className="tech-label text-faint">Facturation</p>
         <button
           type="button"
@@ -102,7 +102,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
   const expired = status?.access.expired ?? false;
 
   return (
-    <div className="rounded-lg border border-line bg-paper p-4">
+    <div className="rounded-2xl border border-line bg-paper p-4">
       <p className="tech-label text-faint">Facturation</p>
 
       {/* Full access active: single confirmation badge. */}
@@ -114,7 +114,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
 
       {/* Access expired (one-time charge older than 30 days). */}
       {expired && (
-        <div className="mt-3 rounded-md border border-warn/40 bg-warn-soft/50 p-3">
+        <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
           <p className="text-sm text-ink">
             Votre acces est expire. Relancez une mise en conformite pour
             re-auditer cette boutique.
@@ -151,7 +151,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="tech-label inline-flex items-center gap-2 rounded bg-go-soft px-2 py-1 text-go">
+    <span className="tech-label inline-flex items-center gap-2 rounded-full bg-go-soft px-2 py-1 text-go">
       <span className="inline-block h-2 w-2 rounded-full bg-go" aria-hidden="true" />
       {children}
     </span>
@@ -181,7 +181,7 @@ function Offer({
         type="button"
         onClick={onClick}
         disabled={busy}
-        className="tech-label shrink-0 rounded bg-brand px-4 py-2 text-surface transition-colors hover:bg-brand-ink disabled:opacity-60"
+        className="tech-label shrink-0 rounded-full bg-ink px-4 py-2 text-paper transition-colors hover:bg-white disabled:opacity-60"
       >
         {busy ? "Redirection..." : action}
       </button>

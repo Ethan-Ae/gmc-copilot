@@ -2,45 +2,50 @@
 @layer theme, base, clerk, components, utilities;
 
 /*
-  Design system: "technical inspection console".
-  Cool paper, near-black ink, deep petrol accent, IBM Plex type.
-  Deliberately avoids the AI cliche (cream + serif + terracotta).
+  Design system: "technical inspection console", deep-black edition.
+  Stacked blacks with a faint petrol cast, off-white ink, one desaturated
+  petrol accent kept for labels and rails, IBM Plex type. Primary actions
+  are off-white pills; relief comes from stacked background tones and white
+  hairlines at low opacity - never from heavy shadows or bright fills.
+
+  Elevation ladder (darkest to lightest):
+    paper (page base) -> surface (cards) -> ink-soft (raised elements).
 */
 @theme inline {
-  --color-paper: #f3f4f6;
-  --color-surface: #ffffff;
-  --color-ink: #14161b;
-  --color-muted: #5c6472;
-  --color-faint: #8b93a1;
-  --color-line: #e3e5ea;
-  --color-line-strong: #cbd0d8;
+  --color-paper: #060809;
+  --color-surface: #0d1113;
+  --color-ink: #e8ebea;
+  --color-muted: #9fa9a7;
+  --color-faint: #7c8887;
+  --color-line: rgba(255, 255, 255, 0.06);
+  --color-line-strong: rgba(255, 255, 255, 0.13);
 
-  --color-brand: #0d5b5b;
-  --color-brand-ink: #0a4343;
-  --color-brand-soft: #e5f0ef;
+  --color-brand: #74b0a7;
+  --color-brand-ink: #92c6bd;
+  --color-brand-soft: #101d1a;
 
-  /* Dark console band: inverted surfaces used by the landing hero. */
-  --color-ink-soft: #1b1f26;
-  --color-ink-line: #2b313b;
-  --color-paper-dim: #a9b1be;
-  --color-paper-faint: #737d8c;
-  --color-brand-lite: #63b3ab;
+  /* Raised band: third elevation step, used by hero inputs and step cards. */
+  --color-ink-soft: #14191b;
+  --color-ink-line: rgba(255, 255, 255, 0.07);
+  --color-paper-dim: #a4aeac;
+  --color-paper-faint: #7c8887;
+  --color-brand-lite: #85bfb6;
 
-  --color-go: #1a7f52;
-  --color-go-soft: #e7f4ec;
-  --color-warn: #9a5a00;
-  --color-warn-soft: #f9efda;
-  --color-nogo: #b42318;
-  --color-nogo-soft: #fbe9e7;
-  --color-slate: #4a5262;
-  --color-slate-soft: #eceef2;
+  --color-go: #5bb287;
+  --color-go-soft: #0d1d16;
+  --color-warn: #c99f55;
+  --color-warn-soft: #201a0f;
+  --color-nogo: #d17468;
+  --color-nogo-soft: #221113;
+  --color-slate: #8f9a99;
+  --color-slate-soft: #151a1c;
 
   --font-sans: var(--font-plex-sans), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
@@ -67,11 +72,11 @@ body {
   font-weight: 500;
 }
 
-/* Engineering-drawing grid, used behind the dark hero band. */
+/* Engineering-drawing grid, used behind the landing hero. */
 .grid-field {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
   background-size: 48px 48px;
   -webkit-mask-image: radial-gradient(
     120% 80% at 50% 0%,
@@ -85,7 +90,7 @@ body {
 .brand-halo {
   background: radial-gradient(
     60% 55% at 22% 18%,
-    rgba(99, 179, 171, 0.16),
+    rgba(133, 191, 182, 0.07),
     transparent 70%
   );
 }

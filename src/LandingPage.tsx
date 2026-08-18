@@ -192,7 +192,7 @@ function Hero({
   loading: boolean;
 }) {
   return (
-    <section id="audit" className="relative overflow-hidden bg-ink text-paper">
+    <section id="audit" className="relative overflow-hidden bg-paper text-ink">
       <div className="absolute inset-0 grid-field" aria-hidden="true" />
       <div className="absolute inset-0 brand-halo" aria-hidden="true" />
 
@@ -230,12 +230,12 @@ function Hero({
               autoComplete="off"
               spellCheck={false}
               disabled={loading}
-              className="flex-1 bg-ink-soft border border-ink-line rounded-md px-4 py-3.5 font-mono text-sm text-paper placeholder:text-paper-faint focus:border-brand-lite focus:outline-none disabled:opacity-60"
+              className="flex-1 bg-ink-soft border border-ink-line rounded-full px-4 py-3.5 font-mono text-sm text-ink placeholder:text-paper-faint focus:border-brand-lite focus:outline-none disabled:opacity-60"
             />
             <button
               onClick={run}
               disabled={loading}
-              className="shrink-0 bg-brand-lite hover:bg-white text-ink font-semibold rounded-md px-6 py-3.5 transition-colors disabled:opacity-60"
+              className="shrink-0 bg-ink hover:bg-white text-paper font-semibold rounded-full px-6 py-3.5 transition-colors disabled:opacity-60"
             >
               {loading ? "Analyse..." : "Auditer gratuitement"}
             </button>
@@ -247,14 +247,14 @@ function Hero({
         </div>
 
         {/* Factual signal row */}
-        <dl className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-px bg-ink-line border border-ink-line rounded-lg overflow-hidden">
+        <dl className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-px bg-ink-line border border-ink-line rounded-2xl overflow-hidden">
           {[
             { k: "30 s", v: "Verdict go / no-go" },
             { k: "10 domaines", v: "Vitrine, policies, produits" },
             { k: "0 CHF", v: "Premier audit sans compte" },
           ].map((s) => (
-            <div key={s.k} className="bg-ink px-5 py-4">
-              <dt className="text-xl font-semibold tracking-tight text-paper">
+            <div key={s.k} className="bg-surface px-5 py-4">
+              <dt className="text-xl font-semibold tracking-tight text-ink">
                 {s.k}
               </dt>
               <dd className="tech-label text-paper-faint mt-1">{s.v}</dd>
@@ -303,7 +303,7 @@ function NoticeView({
     <div className="rise max-w-xl mx-auto">
       <p className={`tech-label mb-3 ${text}`}>{eyebrow}</p>
       <p
-        className={`border-l-2 ${rail} ${soft} rounded-r-md px-4 py-3 font-mono text-sm text-ink`}
+        className={`border-l-2 ${rail} ${soft} rounded-r-xl px-4 py-3 font-mono text-sm text-ink`}
       >
         {message}
       </p>
@@ -319,7 +319,7 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
     <div className="rise space-y-6">
       {/* Verdict panel */}
       <div
-        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-lg p-6`}
+        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-2xl p-6`}
       >
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -334,7 +334,7 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
               </h2>
             </div>
           </div>
-          <span className={`tech-label rounded px-2 py-1 ${verdict.chip}`}>
+          <span className={`tech-label rounded-full px-2 py-1 ${verdict.chip}`}>
             {data.issueCount} probleme{data.issueCount > 1 ? "s" : ""} detecte
             {data.issueCount > 1 ? "s" : ""}
           </span>
@@ -353,13 +353,13 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
           return (
             <li
               key={i}
-              className={`bg-surface border border-line ${sev.rail} border-l-4 rounded-lg p-5`}
+              className={`bg-surface border border-line ${sev.rail} border-l-4 rounded-2xl p-5`}
             >
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`tech-label rounded px-2 py-1 ${sev.chip}`}>
+                <span className={`tech-label rounded-full px-2 py-1 ${sev.chip}`}>
                   {sev.label}
                 </span>
-                <span className="tech-label rounded px-2 py-1 bg-slate-soft text-slate">
+                <span className="tech-label rounded-full px-2 py-1 bg-slate-soft text-slate">
                   {AREA_LABEL[issue.area] ?? issue.area}
                 </span>
               </div>
@@ -386,7 +386,7 @@ function Upsell({ issueCount }: { issueCount: number }) {
 // the detailed fixes), topped by the upgrade CTA.
 function LockedPaywall({ remaining }: { remaining: number }) {
   return (
-    <div className="relative overflow-hidden rounded-lg border border-line-strong">
+    <div className="relative overflow-hidden rounded-2xl border border-line-strong">
       {/* Blurred, non-interactive teaser of the locked content */}
       <div
         className="space-y-4 p-5 blur-sm select-none pointer-events-none"
@@ -395,13 +395,13 @@ function LockedPaywall({ remaining }: { remaining: number }) {
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="bg-surface border border-line border-l-4 border-l-slate rounded-lg p-5"
+            className="bg-surface border border-line border-l-4 border-l-slate rounded-2xl p-5"
           >
             <div className="flex gap-2">
-              <span className="tech-label rounded px-2 py-1 bg-nogo-soft text-nogo">
+              <span className="tech-label rounded-full px-2 py-1 bg-nogo-soft text-nogo">
                 Critique
               </span>
-              <span className="tech-label rounded px-2 py-1 bg-slate-soft text-slate">
+              <span className="tech-label rounded-full px-2 py-1 bg-slate-soft text-slate">
                 Allegations
               </span>
             </div>
@@ -409,7 +409,7 @@ function LockedPaywall({ remaining }: { remaining: number }) {
               Probleme de conformite detecte sur ta boutique, avec le correctif
               a appliquer en un clic avant de redemander la review Google.
             </p>
-            <div className="mt-4 border-l-2 border-l-brand bg-brand-soft/70 rounded-r-md px-4 py-3">
+            <div className="mt-4 border-l-2 border-l-brand bg-brand-soft/70 rounded-r-xl px-4 py-3">
               <p className="tech-label text-brand mb-1">Correctif</p>
               <p className="text-ink leading-relaxed">
                 Texte de correction pret a appliquer, masque dans l&apos;apercu
@@ -434,7 +434,7 @@ function LockedPaywall({ remaining }: { remaining: number }) {
         </p>
         <Link
           href="/pricing"
-          className="inline-flex mt-6 bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
+          className="inline-flex mt-6 bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
         >
           Voir le rapport complet et corriger &rarr; Tarifs
         </Link>
@@ -455,7 +455,7 @@ function PositiveUpsell({ issueCount }: { issueCount: number }) {
           issueCount > 1 ? "s" : ""
         }. Un audit complet couvre aussi tes donnees produit et ton statut Merchant Center avant ta review GMC.`;
   return (
-    <div className="rounded-lg border border-go/40 bg-go-soft/50 p-6 text-center sm:text-left">
+    <div className="rounded-2xl border border-go/40 bg-go-soft/50 p-6 text-center sm:text-left">
       <p className="tech-label text-go mb-2">Bonne nouvelle</p>
       <h3 className="text-xl font-semibold tracking-tight">
         Ta boutique est deja solide
@@ -463,7 +463,7 @@ function PositiveUpsell({ issueCount }: { issueCount: number }) {
       <p className="mt-3 text-muted max-w-xl leading-relaxed">{body}</p>
       <Link
         href="/pricing"
-        className="inline-flex mt-6 bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
+        className="inline-flex mt-6 bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
       >
         Obtenir l&apos;audit complet &rarr; Tarifs
       </Link>
@@ -543,7 +543,7 @@ function WhyRefused() {
           {CAUSES.map((c) => (
             <div
               key={c.n}
-              className="border border-line rounded-lg bg-surface p-5"
+              className="border border-line rounded-2xl bg-surface p-5"
             >
               <p className="tech-label text-nogo mb-3">{c.n}</p>
               <h3 className="font-semibold tracking-tight leading-snug">
@@ -556,7 +556,7 @@ function WhyRefused() {
           ))}
         </div>
 
-        <div className="mt-10 border-l-2 border-l-brand bg-brand-soft/60 rounded-r-md px-5 py-4">
+        <div className="mt-10 border-l-2 border-l-brand bg-brand-soft/60 rounded-r-xl px-5 py-4">
           <p className="tech-label text-brand mb-1">Regle de travail</p>
           <p className="text-ink leading-relaxed">
             Rendre la boutique ennuyeusement verifiable. Toute claim publique
@@ -621,7 +621,7 @@ function AuditScope() {
           lead="Le meme perimetre que celui d'un auditeur qui cherche une seule incoherence. Rien n'est declare conforme sans preuve visible sur ton site."
         />
 
-        <ul className="mt-10 grid gap-px bg-line border border-line rounded-lg overflow-hidden sm:grid-cols-2">
+        <ul className="mt-10 grid gap-px bg-line border border-line rounded-2xl overflow-hidden sm:grid-cols-2">
           {SCOPE.map((s, i) => (
             <li key={s.area} className="bg-surface p-5">
               <div className="flex items-baseline gap-3">
@@ -661,7 +661,7 @@ const STEPS = [
 
 function HowItWorks() {
   return (
-    <section className="border-t border-ink-line bg-ink text-paper">
+    <section className="border-t border-line bg-paper text-ink">
       <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:py-20">
         <SectionHead
           eyebrow="Comment ca marche"
@@ -669,9 +669,9 @@ function HowItWorks() {
           title="Trois etapes, de la panne au feu vert."
         />
 
-        <ol className="mt-10 space-y-px bg-ink-line border border-ink-line rounded-lg overflow-hidden">
+        <ol className="mt-10 space-y-px bg-ink-line border border-ink-line rounded-2xl overflow-hidden">
           {STEPS.map((s) => (
-            <li key={s.n} className="bg-ink p-6 sm:flex sm:gap-6">
+            <li key={s.n} className="bg-ink-soft p-6 sm:flex sm:gap-6">
               <p className="tech-label text-brand-lite sm:w-16 shrink-0 mb-3 sm:mb-0 sm:pt-1">
                 {s.n}
               </p>
@@ -700,7 +700,7 @@ function PricingStrip() {
         />
 
         <div className="mt-10 grid gap-6 md:grid-cols-2 items-stretch">
-          <div className="flex flex-col border border-line rounded-lg bg-surface p-6">
+          <div className="flex flex-col border border-line rounded-2xl bg-surface p-6">
             <p className="tech-label text-faint mb-2">Gratuit</p>
             <h3 className="text-xl font-semibold tracking-tight">
               Audit express
@@ -732,14 +732,14 @@ function PricingStrip() {
             </ul>
             <a
               href="#audit"
-              className="mt-8 block text-center border border-line-strong hover:border-ink text-ink font-medium rounded-md px-6 py-3 transition-colors"
+              className="mt-8 block text-center border border-line-strong hover:border-ink text-ink font-medium rounded-full px-6 py-3 transition-colors"
             >
               Lancer l&apos;audit gratuit
             </a>
           </div>
 
-          <div className="relative flex flex-col border-2 border-brand rounded-lg bg-surface p-6">
-            <span className="absolute -top-3 left-6 tech-label rounded bg-brand px-2 py-1 text-surface">
+          <div className="relative flex flex-col border border-brand/50 rounded-2xl bg-surface p-6">
+            <span className="absolute -top-3 left-6 tech-label rounded-full bg-brand px-2 py-1 text-surface">
               Recommande
             </span>
             <p className="tech-label text-brand mb-2">One-shot</p>
@@ -773,7 +773,7 @@ function PricingStrip() {
             </ul>
             <Link
               href="/pricing"
-              className="mt-8 block text-center bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
+              className="mt-8 block text-center bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
             >
               Voir le detail de l&apos;offre
             </Link>
@@ -834,7 +834,7 @@ function FinalCta() {
   return (
     <section className="border-t border-line bg-paper">
       <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:py-20">
-        <div className="rounded-lg border border-line-strong bg-surface p-8 sm:p-10 text-center">
+        <div className="rounded-2xl border border-line-strong bg-surface p-8 sm:p-10 text-center">
           <p className="tech-label text-brand mb-4">Commence ici</p>
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-tight max-w-xl mx-auto">
             Savoir ce qui bloque prend 30 secondes.
@@ -845,7 +845,7 @@ function FinalCta() {
           </p>
           <a
             href="#audit"
-            className="inline-flex mt-8 bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-8 py-3.5 transition-colors"
+            className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-3.5 transition-colors"
           >
             Auditer ma boutique gratuitement
           </a>

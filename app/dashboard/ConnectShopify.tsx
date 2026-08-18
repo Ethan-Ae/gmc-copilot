@@ -35,11 +35,11 @@ export default function ConnectShopify() {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="ta-boutique.myshopify.com"
-        className="min-w-64 rounded border border-line-strong bg-surface px-3 py-2 text-ink placeholder:text-faint"
+        className="min-w-64 rounded-full border border-line-strong bg-surface px-3 py-2 text-ink placeholder:text-faint"
       />
       <button
         type="submit"
-        className="tech-label rounded bg-brand px-4 py-2 text-surface hover:bg-brand-ink"
+        className="tech-label rounded-full bg-ink px-4 py-2 text-paper hover:bg-white"
       >
         Connecter
       </button>

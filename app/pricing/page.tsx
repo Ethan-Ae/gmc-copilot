@@ -91,14 +91,14 @@ export default function PricingPage() {
 
 function OfferCard({ offer }: { offer: Offer }) {
   const shell = offer.highlight
-    ? "border-brand border-2 bg-surface"
+    ? "border-brand/50 border bg-surface"
     : "border-line border bg-paper";
   return (
     <div
-      className={`relative flex flex-col rounded-lg ${shell} p-6`}
+      className={`relative flex flex-col rounded-2xl ${shell} p-6`}
     >
       {offer.highlight && (
-        <span className="absolute -top-3 left-6 tech-label rounded bg-brand px-2 py-1 text-surface">
+        <span className="absolute -top-3 left-6 tech-label rounded-full bg-brand px-2 py-1 text-surface">
           Recommande
         </span>
       )}
@@ -132,7 +132,7 @@ function OfferCard({ offer }: { offer: Offer }) {
         {offer.cta.href ? (
           <Link
             href={offer.cta.href}
-            className="block text-center bg-brand hover:bg-brand-ink text-white font-medium rounded-md px-6 py-3 transition-colors"
+            className="block text-center bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
           >
             {offer.cta.label}
           </Link>
@@ -140,7 +140,7 @@ function OfferCard({ offer }: { offer: Offer }) {
           <button
             type="button"
             disabled
-            className="w-full bg-ink/90 text-white font-medium rounded-md px-6 py-3 opacity-70 cursor-not-allowed"
+            className="w-full bg-ink-soft text-muted font-medium rounded-full px-6 py-3 opacity-70 cursor-not-allowed"
           >
             {offer.cta.label}
           </button>
