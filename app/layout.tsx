@@ -40,21 +40,21 @@ export default function RootLayout({
       appearance={{
         cssLayerName: "clerk",
         variables: {
-          colorBackground: "#0d1113",
-          colorForeground: "#e8ebea",
-          colorMutedForeground: "#9fa9a7",
-          colorPrimary: "#e8ebea",
-          colorPrimaryForeground: "#060809",
-          colorInput: "#14191b",
-          colorInputForeground: "#e8ebea",
-          colorNeutral: "#e8ebea",
+          colorBackground: "#111113",
+          colorForeground: "#f5f5f7",
+          colorMutedForeground: "#a1a1a6",
+          colorPrimary: "#f5f5f7",
+          colorPrimaryForeground: "#0a0a0a",
+          colorInput: "#16161a",
+          colorInputForeground: "#f5f5f7",
+          colorNeutral: "#f5f5f7",
           colorBorder: "rgba(255, 255, 255, 0.1)",
           colorShadow: "rgba(0, 0, 0, 0.55)",
           colorModalBackdrop: "#000000",
           colorDanger: "#d17468",
           colorSuccess: "#5bb287",
           colorWarning: "#c99f55",
-          borderRadius: "0.75rem",
+          borderRadius: "1rem",
         },
       }}
     >
@@ -63,19 +63,19 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
         <body className="min-h-full flex flex-col">
-          <header className="flex items-center justify-between border-b border-line px-6 py-3">
+          <header className="flex items-center justify-between border-b border-line-soft bg-paper px-6 py-4">
             <Link href="/" className="tech-label text-brand">
               Feedcompliant
             </Link>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-5">
               <Show when="signed-out">
                 <SignInButton mode="modal" forceRedirectUrl="/dashboard">
-                  <button className="tech-label text-muted hover:text-ink">
+                  <button className="tech-label text-muted hover:text-ink transition-colors">
                     Connexion
                   </button>
                 </SignInButton>
                 <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
-                  <button className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white">
+                  <button className="tech-label rounded-full bg-ink px-4 py-2 text-paper hover:bg-white transition-colors">
                     Inscription
                   </button>
                 </SignUpButton>
@@ -83,7 +83,7 @@ export default function RootLayout({
               <Show when="signed-in">
                 <Link
                   href="/dashboard"
-                  className="tech-label text-muted hover:text-ink"
+                  className="tech-label text-muted hover:text-ink transition-colors"
                 >
                   Tableau de bord
                 </Link>
@@ -92,27 +92,27 @@ export default function RootLayout({
             </div>
           </header>
           {children}
-          <footer className="border-t border-line px-6 py-4">
-            <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 sm:flex-row">
+          <footer className="border-t border-line-soft px-6 py-6">
+            <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-3 sm:flex-row">
               <span className="tech-label text-faint">
                 Feedcompliant
               </span>
-              <nav className="flex items-center gap-4">
+              <nav className="flex items-center gap-5">
                 <Link
                   href="/pricing"
-                  className="tech-label text-muted hover:text-ink"
+                  className="tech-label text-muted hover:text-ink transition-colors"
                 >
                   Tarifs
                 </Link>
                 <Link
                   href="/privacy"
-                  className="tech-label text-muted hover:text-ink"
+                  className="tech-label text-muted hover:text-ink transition-colors"
                 >
                   Confidentialite
                 </Link>
                 <Link
                   href="/terms"
-                  className="tech-label text-muted hover:text-ink"
+                  className="tech-label text-muted hover:text-ink transition-colors"
                 >
                   Conditions
                 </Link>

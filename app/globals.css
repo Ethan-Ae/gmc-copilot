@@ -2,33 +2,35 @@
 @layer theme, base, clerk, components, utilities;
 
 /*
-  Design system: "technical inspection console", deep-black edition.
-  Stacked blacks with a faint petrol cast, off-white ink, one desaturated
-  petrol accent kept for labels and rails, Geist type. Primary actions
-  are off-white pills; relief comes from stacked background tones and white
-  hairlines at low opacity - never from heavy shadows or bright fills.
+  Design system: Apple-keynote black-on-black, Swiss-minimal edition.
+  Stacked near-blacks, off-white ink, one teal accent reserved for the
+  primary CTA, links, active states and status icons, Geist type. Primary
+  actions are off-white pills; relief comes from stacked background tones
+  and white hairlines at low opacity - never from heavy shadows or bright
+  fills.
 
   Elevation ladder (darkest to lightest):
-    paper (page base) -> surface (cards) -> ink-soft (raised elements).
+    paper (page base) -> surface (alternating sections) -> ink-soft (cards).
 */
 @theme inline {
-  --color-paper: #060809;
-  --color-surface: #0d1113;
-  --color-ink: #e8ebea;
-  --color-muted: #9fa9a7;
-  --color-faint: #7c8887;
-  --color-line: rgba(255, 255, 255, 0.06);
-  --color-line-strong: rgba(255, 255, 255, 0.13);
+  --color-paper: #0a0a0a;
+  --color-surface: #111113;
+  --color-ink: #f5f5f7;
+  --color-muted: #a1a1a6;
+  --color-faint: #6e6e73;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-soft: rgba(255, 255, 255, 0.06);
+  --color-line-strong: rgba(255, 255, 255, 0.15);
 
   --color-brand: #74b0a7;
   --color-brand-ink: #92c6bd;
   --color-brand-soft: #101d1a;
 
-  /* Raised band: third elevation step, used by hero inputs and step cards. */
-  --color-ink-soft: #14191b;
-  --color-ink-line: rgba(255, 255, 255, 0.07);
-  --color-paper-dim: #a4aeac;
-  --color-paper-faint: #7c8887;
+  /* Card band: third elevation step, used by every bordered content card. */
+  --color-ink-soft: #16161a;
+  --color-ink-line: rgba(255, 255, 255, 0.1);
+  --color-paper-dim: #a1a1a6;
+  --color-paper-faint: #6e6e73;
   --color-brand-lite: #85bfb6;
 
   --color-go: #5bb287;

@@ -57,10 +57,10 @@ export default function PricingPage() {
       {/* Hero */}
       <section className="mx-auto w-full max-w-5xl px-5 pt-16 sm:pt-24 pb-8">
         <p className="tech-label text-brand mb-4">Tarifs</p>
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-tight max-w-2xl">
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.05] max-w-2xl">
           Choisis comment passer la conformite Merchant Center.
         </h1>
-        <p className="mt-4 text-muted max-w-xl leading-relaxed">
+        <p className="mt-4 text-lg text-muted max-w-xl leading-relaxed font-normal">
           Commence par un audit gratuit, puis debloque le rapport complet et les
           correctifs quand tu es pret. Pas d&apos;engagement.
         </p>
@@ -91,11 +91,11 @@ export default function PricingPage() {
 
 function OfferCard({ offer }: { offer: Offer }) {
   const shell = offer.highlight
-    ? "border-brand/50 border bg-surface"
-    : "border-line border bg-paper";
+    ? "border-brand/50 border bg-ink-soft"
+    : "border-line border bg-ink-soft";
   return (
     <div
-      className={`relative flex flex-col rounded-3xl ${shell} p-6`}
+      className={`relative flex flex-col rounded-2xl ${shell} p-6`}
     >
       {offer.highlight && (
         <span className="absolute -top-3 left-6 tech-label rounded-full bg-ink px-2 py-1 text-paper">
@@ -132,7 +132,7 @@ function OfferCard({ offer }: { offer: Offer }) {
         {offer.cta.href ? (
           <Link
             href={offer.cta.href}
-            className="block text-center bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
+            className="block text-center bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
           >
             {offer.cta.label}
           </Link>
@@ -140,7 +140,7 @@ function OfferCard({ offer }: { offer: Offer }) {
           <button
             type="button"
             disabled
-            className="w-full bg-ink-soft text-muted font-medium rounded-full px-6 py-3 opacity-70 cursor-not-allowed"
+            className="w-full border border-line-strong text-muted font-medium rounded-full px-8 py-4 opacity-70 cursor-not-allowed"
           >
             {offer.cta.label}
           </button>

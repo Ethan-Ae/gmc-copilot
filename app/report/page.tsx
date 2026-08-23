@@ -133,7 +133,7 @@ const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
 
 function Masthead({ shop }: { shop?: string }) {
   return (
-    <header className="border-b border-line bg-surface text-ink">
+    <header className="border-b border-line-soft bg-surface text-ink">
       <div className="mx-auto w-full max-w-3xl px-5 py-3 flex items-center justify-between gap-4">
         <Link href="/" className="tech-label text-ink">
           Feedcompliant
@@ -246,7 +246,7 @@ function NotConnectedView({ shop }: { shop: string }) {
       {shop && (
         <a
           href={`/api/shopify/auth?shop=${encodeURIComponent(shop)}`}
-          className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
+          className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
         >
           Connecter Shopify
         </a>
@@ -278,7 +278,7 @@ function ErrorView({
       </p>
       <button
         onClick={onRetry}
-        className="mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-6 py-3 transition-colors"
+        className="mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
       >
         Reessayer
       </button>
@@ -307,7 +307,7 @@ function ResultView({
     <div className="rise space-y-8">
       {/* Verdict panel */}
       <section
-        className={`bg-surface border border-line ${verdict.rail} border-l-4 rounded-3xl p-6`}
+        className={`bg-ink-soft border border-line ${verdict.rail} border-l-4 rounded-2xl p-6`}
       >
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -351,7 +351,7 @@ function ResultView({
           Problemes detectes ({issues.length})
         </h2>
         {issues.length === 0 ? (
-          <p className="bg-surface border border-line rounded-3xl p-6 text-muted">
+          <p className="bg-ink-soft border border-line rounded-2xl p-6 text-muted">
             Aucun probleme detecte sur les donnees inspectees.
           </p>
         ) : (
@@ -378,7 +378,7 @@ function ResultView({
             {audit.checked.map((c, i) => (
               <li
                 key={i}
-                className="inline-flex items-center gap-2 bg-surface border border-line rounded-full px-3 py-1.5 font-mono text-xs text-muted"
+                className="inline-flex items-center gap-2 bg-ink-soft border border-line rounded-full px-3 py-1.5 font-mono text-xs text-muted"
               >
                 <span className="text-go" aria-hidden="true">
                   &#10003;
@@ -404,7 +404,7 @@ function IssueCard({
 }) {
   const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
   return (
-    <li className="bg-surface border border-line rounded-3xl p-5">
+    <li className="bg-ink-soft border border-line rounded-2xl p-5">
       <div className="flex items-center gap-2 flex-wrap">
         <span className={`tech-label rounded-full px-2 py-1 ${sev.chip}`}>
           {sev.label}

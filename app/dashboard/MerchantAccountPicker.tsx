@@ -51,7 +51,7 @@ export default function MerchantAccountPicker({
         {accounts.map((a) => (
           <label
             key={a.id}
-            className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2"
+            className="flex items-center gap-3 rounded-xl border border-line bg-ink-soft px-3 py-2"
           >
             <input
               type="radio"

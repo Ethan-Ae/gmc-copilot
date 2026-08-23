@@ -35,7 +35,7 @@ export default function ConnectShopify() {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="ta-boutique.myshopify.com"
-        className="min-w-64 rounded-full border border-line-strong bg-surface px-3 py-2 text-ink placeholder:text-faint"
+        className="min-w-64 rounded-xl border border-ink-line bg-ink-soft px-3.5 py-2.5 text-ink placeholder:text-faint focus:border-brand focus:outline-none"
       />
       <button
         type="submit"
