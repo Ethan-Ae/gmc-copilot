@@ -180,7 +180,32 @@ async function resolveProductSeo(
         }`,
         { input: { id: product.id, ...built } },
       );
-      return res.productUpdate?.userErrors ?? [];
+      const userErrors = res.productUpdate?.userErrors ?? [];
+      if (userErrors.length) return userErrors;
+
+      // descriptionHtml is the field the reviewer found silently empty after
+      // "Applied". Re-read it so a Shopify-side no-op (e.g. an app block or
+      // sync overriding the write) surfaces as a real error instead of a
+      // false success.
+      if (seoField === "descriptionHtml" && newValue.trim() !== "") {
+        const check = await shopifyGraphQL<{
+          product: { descriptionHtml: string } | null;
+        }>(
+          shop,
+          token,
+          `query($id: ID!) { product(id: $id) { descriptionHtml } }`,
+          { id: product.id },
+        );
+        if (!check.product?.descriptionHtml?.trim()) {
+          return [
+            {
+              message:
+                "L'ecriture n'a pas ete confirmee par Shopify, la description est restee vide. Reessayez.",
+            },
+          ];
+        }
+      }
+      return [];
     },
   };
 }
@@ -296,9 +321,11 @@ async function resolveCompareAt(
   };
 }
 
-// policy: shopPolicyUpdate needs the real ShopPolicy gid, not the type. targetId
-// holds the type (e.g. REFUND_POLICY); we query the shop policies and map it to
-// its id before writing.
+// policy: ShopPolicyInput only needs { type, body }, no existing id required,
+// so shopPolicyUpdate also creates a policy of that type when it does not yet
+// exist. targetId holds the type (e.g. REFUND_POLICY). A type absent from
+// shop.shopPolicies is treated as an empty, writable policy - never an error -
+// so the merchant can fill it in from scratch.
 async function resolvePolicy(
   shop: string,
   token: string,
@@ -312,10 +339,9 @@ async function resolvePolicy(
   }>(shop, token, `{ shop { shopPolicies { id type body } } }`, {});
 
   const policy = (data.shop?.shopPolicies ?? []).find((p) => p.type === type);
-  if (!policy) return { error: "policy_not_found", status: 404 };
 
   return {
-    currentLive: policy.body,
+    currentLive: policy?.body ?? "",
     write: async (newValue: string) => {
       const res = await shopifyGraphQL<{
         shopPolicyUpdate: { userErrors: UserError[] };
@@ -328,7 +354,7 @@ async function resolvePolicy(
             userErrors { field message }
           }
         }`,
-        { shopPolicy: { id: policy.id, body: newValue } },
+        { shopPolicy: { type, body: newValue } },
       );
       return res.shopPolicyUpdate?.userErrors ?? [];
     },

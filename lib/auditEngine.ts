@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { SHOPIFY_API_VERSION } from "./shopify";
 import {
-  createPendingAudit,
+  createQueuedAudit,
   markAuditDone,
   markAuditFailed,
+  updateAuditProgress,
   type AuditSource,
 } from "./audits";
 import { getGoogleTokenForUser } from "./googleStore";
@@ -38,6 +39,10 @@ export type AuditEngineResult = {
   overall: string;
   model: string;
   truncated: boolean;
+  gmcConnected: boolean;
+  productsAudited: number;
+  productsTotal: number | null;
+  warnings: string[];
 };
 
 const SYSTEM = `${GMC_SKILL}
@@ -269,25 +274,73 @@ const AUDIT_TOOL: Anthropic.Tool = {
   },
 };
 
-// Runs the full GMC audit pipeline for one shop and persists the result.
-// The caller is responsible for obtaining the Shopify token (so it can map a
-// ShopifyReauthRequired to the right response) and for any quota/entitlement
-// gating. `source` decides whether the reserved row counts against the monthly
-// manual quota ('manual') or is a monitoring run that does not ('auto').
-export async function runAuditForShop(opts: {
-  userId: string;
-  shop: string;
-  token: string;
-  source: AuditSource;
-}): Promise<AuditEngineResult> {
-  const { userId, shop, token, source } = opts;
+// A Shopify Admin GraphQL call that must never throw: any network error or
+// GraphQL error is caught, logged into `warnings`, and replaced with `fallback`.
+// Every Admin API read used by the audit (shop, products, shipping, markets)
+// goes through this so one flaky endpoint never fails the whole audit.
+async function safeShopifyGraphQL<T>(
+  shop: string,
+  token: string,
+  query: string,
+  variables: Record<string, unknown> | undefined,
+  fallback: T,
+  warningLabel: string,
+  warnings: string[],
+): Promise<T> {
+  try {
+    const res = await fetch(
+      `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({ query, variables }),
+      },
+    );
+    const json = await res.json();
+    if (!res.ok || json?.errors) {
+      warnings.push(`${warningLabel}: ${JSON.stringify(json?.errors ?? res.status)}`);
+      return fallback;
+    }
+    return (json?.data as T) ?? fallback;
+  } catch (err) {
+    warnings.push(`${warningLabel}: ${String(err)}`);
+    return fallback;
+  }
+}
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new MissingAnthropicKey();
+type VariantNode = {
+  id?: string;
+  title?: string;
+  price?: string;
+  compareAtPrice?: string | null;
+};
+type ProductNode = {
+  id?: string;
+  handle?: string;
+  title?: string;
+  descriptionHtml?: string;
+  seo?: { title?: string | null; description?: string | null };
+  variants?: { edges?: { node?: VariantNode }[] };
+};
+type ProductEdge = { node?: ProductNode };
 
-  const query = `{
-    shop { name myshopifyDomain currencyCode contactEmail }
-    products(first: 20) {
+const PRODUCT_PAGE_SIZE = 50;
+const MAX_PRODUCTS = 250;
+
+// Paginate active products by cursor up to MAX_PRODUCTS. A page fetch failure
+// stops pagination but keeps whatever was already fetched (never throws), and
+// is recorded as a warning so the audit still runs on a partial catalogue.
+async function fetchActiveProducts(
+  shop: string,
+  token: string,
+  warnings: string[],
+): Promise<{ edges: ProductEdge[]; total: number | null }> {
+  const query = `query($first: Int!, $after: String) {
+    products(first: $first, after: $after, query: "status:active") {
+      pageInfo { hasNextPage endCursor }
       edges {
         node {
           id
@@ -310,129 +363,297 @@ export async function runAuditForShop(opts: {
     }
   }`;
 
-  const shopRes = await fetch(
-    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": token,
-      },
-      body: JSON.stringify({ query }),
-    },
-  );
-  const shopData = await shopRes.json();
+  type ProductsPage = {
+    products?: {
+      pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+      edges?: ProductEdge[];
+    };
+  } | null;
 
-  // Product handles from the Admin API feed the storefront product crawl.
-  type VariantNode = {
-    id?: string;
-    title?: string;
-    price?: string;
-    compareAtPrice?: string | null;
-  };
-  type ProductNode = {
-    id?: string;
-    handle?: string;
-    title?: string;
-    variants?: { edges?: { node?: VariantNode }[] };
-  };
-  type ProductEdge = { node?: ProductNode };
-  const productEdges: ProductEdge[] = shopData?.data?.products?.edges ?? [];
-  const handles = productEdges
-    .map((e) => e?.node?.handle)
-    .filter((h): h is string => typeof h === "string" && h.length > 0);
-
-  // A compact, clearly labelled index of the real Shopify GIDs so the model can
-  // copy targetId/targetHandle verbatim into each patch (never invent an id).
-  const idIndex = productEdges
-    .map((e) => e?.node)
-    .filter((n): n is ProductNode => Boolean(n && n.id))
-    .map((n) => {
-      const variants = (n.variants?.edges ?? [])
-        .map((v) => v?.node)
-        .filter((v): v is VariantNode => Boolean(v && v.id))
-        .map(
-          (v) =>
-            `  VARIANTE id="${v.id}" title=${JSON.stringify(v.title ?? "")} ` +
-            `price=${JSON.stringify(v.price ?? "")} ` +
-            `compareAtPrice=${JSON.stringify(v.compareAtPrice ?? null)}`,
-        )
-        .join("\n");
-      const head =
-        `PRODUIT id="${n.id}" handle=${JSON.stringify(n.handle ?? "")} ` +
-        `title=${JSON.stringify(n.title ?? "")}`;
-      return variants ? `${head}\n${variants}` : head;
-    })
-    .join("\n");
-
-  // Crawl the public storefront (home, policies, pages, products). A crawl
-  // failure must not break the audit, so degrade to an empty result.
-  let crawl: CrawlResult;
-  try {
-    crawl = await crawlStorefront(shop, handles);
-  } catch {
-    crawl = { locked: false, pages: [] };
-  }
-
-  // Real Merchant Center status for the shop owner, when a Google account is
-  // connected. Any failure (no token, API error) must not block the audit.
-  let gmcStatus: MerchantStatus | null = null;
-  try {
-    const googleTok = await getGoogleTokenForUser(userId);
-    if (googleTok) {
-      gmcStatus = await getMerchantStatus(
-        googleTok.refresh_token,
-        googleTok.merchant_account_id,
-      );
-    }
-  } catch {
-    gmcStatus = null;
-  }
-
-  // Build the Merchant Center section. Any part that came back as a structured
-  // API error is replaced with an honest factual line, never sent to Claude as
-  // if it were real data (which would let the model hallucinate on error JSON).
-  let gmcSection: string;
-  if (!gmcStatus) {
-    gmcSection =
-      "Aucun compte Google Merchant Center connecte pour ce marchand. " +
-      'Mets "source": "site" sur chaque issue.';
-  } else {
-    const lines: string[] = [];
-    if (isMerchantApiError(gmcStatus.accountIssues)) {
-      lines.push(
-        `Le statut Merchant Center n'a pas pu etre lu (erreur technique ${gmcStatus.accountIssues.apiError.status}).`,
-      );
-    } else {
-      lines.push(
-        "ACCOUNT ISSUES:\n" + JSON.stringify(gmcStatus.accountIssues),
-      );
-    }
-    if (isMerchantApiError(gmcStatus.products)) {
-      lines.push(
-        `Les problemes produit Merchant Center n'ont pas pu etre lus (erreur technique ${gmcStatus.products.apiError.status}).`,
-      );
-    } else if (gmcStatus.products != null) {
-      lines.push("PRODUCTS:\n" + JSON.stringify(gmcStatus.products));
-    }
-    lines.push(
-      "Compare les risques detectes sur le site avec les account issues " +
-        "disponibles ci-dessus. Ne traite pas une erreur technique comme une " +
-        'issue Merchant Center. Marque chaque issue du rapport avec le champ ' +
-        '"source" ("site", "gmc_confirmed" ou "both").',
+  const edges: ProductEdge[] = [];
+  let after: string | null = null;
+  for (let page = 0; edges.length < MAX_PRODUCTS; page += 1) {
+    const data: ProductsPage = await safeShopifyGraphQL<ProductsPage>(
+      shop,
+      token,
+      query,
+      { first: PRODUCT_PAGE_SIZE, after },
+      null,
+      "products",
+      warnings,
     );
-    gmcSection = lines.join("\n\n");
+    const pageEdges: ProductEdge[] = data?.products?.edges ?? [];
+    edges.push(...pageEdges);
+    const hasNext: boolean = Boolean(data?.products?.pageInfo?.hasNextPage);
+    const nextCursor: string | null = data?.products?.pageInfo?.endCursor ?? null;
+    if (!data || !hasNext || !nextCursor || pageEdges.length === 0) break;
+    after = nextCursor;
+    // Safety valve: never loop more than MAX_PRODUCTS / PRODUCT_PAGE_SIZE + 1
+    // pages even if the API misbehaves and keeps reporting hasNextPage.
+    if (page > Math.ceil(MAX_PRODUCTS / PRODUCT_PAGE_SIZE) + 1) break;
   }
 
-  const anthropic = new Anthropic({ apiKey });
-  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+  const countData = await safeShopifyGraphQL<{
+    productsCount?: { count?: number } | null;
+  } | null>(
+    shop,
+    token,
+    `{ productsCount(query: "status:active") { count } }`,
+    undefined,
+    null,
+    "productsCount",
+    warnings,
+  );
+  const total = countData?.productsCount?.count ?? null;
 
-  // Reserve the quota row as 'pending' BEFORE the paid Claude call. From here
-  // on the attempt exists even if the call fails afterwards. 'auto' rows are
-  // tagged so they never consume the manual monthly quota.
-  const auditId = await createPendingAudit(userId, shop, source);
+  return { edges: edges.slice(0, MAX_PRODUCTS), total };
+}
+
+// Runs the full GMC audit pipeline for one shop and persists the result.
+// The caller is responsible for obtaining the Shopify token (so it can map a
+// ShopifyReauthRequired to the right response) and for any quota/entitlement
+// gating. `source` decides whether the reserved row counts against the monthly
+// manual quota ('manual') or is a monitoring run that does not ('auto').
+//
+// When `auditId` is provided (the async worker path), the row was already
+// reserved by the caller and this function only updates it. When omitted (the
+// synchronous cron re-audit path), a new 'queued' row is reserved here, as
+// before.
+export async function runAuditForShop(opts: {
+  userId: string;
+  shop: string;
+  token: string;
+  source: AuditSource;
+  auditId?: string;
+  onProgress?: (step: string) => Promise<void>;
+}): Promise<AuditEngineResult> {
+  const { userId, shop, token, source } = opts;
+
+  // If the caller (the async worker route) already reserved a row, reuse it so
+  // a failure below can always mark that same row 'failed' instead of leaving
+  // it stuck at 'queued'. Only the synchronous cron path creates a fresh row
+  // here, and it does so before anything can fail.
+  const auditId = opts.auditId ?? (await createQueuedAudit(userId, shop, source));
+  const warnings: string[] = [];
+
+  const reportProgress = async (step: string) => {
+    if (opts.onProgress) {
+      await opts.onProgress(step).catch(() => {});
+    } else {
+      await updateAuditProgress(auditId, step).catch(() => {});
+    }
+  };
 
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new MissingAnthropicKey();
+
+    await reportProgress("Lecture des produits");
+
+    // Shop identity: never let this throw. A missing shop object still lets
+    // the audit run on an empty product list rather than crash the worker.
+    const shopInfo = await safeShopifyGraphQL<{
+      shop?: {
+        name?: string;
+        myshopifyDomain?: string;
+        currencyCode?: string;
+        contactEmail?: string;
+      };
+    } | null>(
+      shop,
+      token,
+      `{ shop { name myshopifyDomain currencyCode contactEmail } }`,
+      undefined,
+      null,
+      "shop",
+      warnings,
+    );
+
+    const { edges: productEdges, total: productsTotal } =
+      await fetchActiveProducts(shop, token, warnings);
+
+    // Shipping zones/rates and markets/currencies, best-effort context for the
+    // shipping and multi-market checks. Never block the audit: an empty result
+    // just means the model is told nothing extra was available.
+    const shippingData = await safeShopifyGraphQL<{
+      deliveryProfiles?: {
+        edges?: {
+          node?: {
+            name?: string;
+            profileLocationGroups?: {
+              locationGroupZones?: {
+                edges?: {
+                  node?: {
+                    zone?: { name?: string; countries?: { name?: string }[] };
+                    methodDefinitions?: {
+                      edges?: {
+                        node?: {
+                          name?: string;
+                          rateProvider?: {
+                            price?: { amount?: string; currencyCode?: string };
+                          };
+                        };
+                      }[];
+                    };
+                  };
+                }[];
+              };
+            };
+          };
+        }[];
+      };
+    } | null>(
+      shop,
+      token,
+      `{
+        deliveryProfiles(first: 5) {
+          edges {
+            node {
+              name
+              profileLocationGroups {
+                locationGroupZones(first: 10) {
+                  edges {
+                    node {
+                      zone { name countries { name } }
+                      methodDefinitions(first: 10) {
+                        edges {
+                          node {
+                            name
+                            rateProvider {
+                              ... on DeliveryRateDefinition {
+                                price { amount currencyCode }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }`,
+      undefined,
+      null,
+      "shippingZones",
+      warnings,
+    );
+
+    const marketsData = await safeShopifyGraphQL<{
+      markets?: { nodes?: { name?: string; enabled?: boolean }[] };
+    } | null>(
+      shop,
+      token,
+      `{ markets(first: 20) { nodes { name enabled } } }`,
+      undefined,
+      null,
+      "markets",
+      warnings,
+    );
+
+    // Product handles from the Admin API feed the storefront product crawl.
+    const handles = productEdges
+      .map((e) => e?.node?.handle)
+      .filter((h): h is string => typeof h === "string" && h.length > 0);
+
+    // A compact, clearly labelled index of the real Shopify GIDs so the model
+    // can copy targetId/targetHandle verbatim into each patch (never invent an
+    // id).
+    const idIndex = productEdges
+      .map((e) => e?.node)
+      .filter((n): n is ProductNode => Boolean(n && n.id))
+      .map((n) => {
+        const variants = (n.variants?.edges ?? [])
+          .map((v) => v?.node)
+          .filter((v): v is VariantNode => Boolean(v && v.id))
+          .map(
+            (v) =>
+              `  VARIANTE id="${v.id}" title=${JSON.stringify(v.title ?? "")} ` +
+              `price=${JSON.stringify(v.price ?? "")} ` +
+              `compareAtPrice=${JSON.stringify(v.compareAtPrice ?? null)}`,
+          )
+          .join("\n");
+        const head =
+          `PRODUIT id="${n.id}" handle=${JSON.stringify(n.handle ?? "")} ` +
+          `title=${JSON.stringify(n.title ?? "")}`;
+        return variants ? `${head}\n${variants}` : head;
+      })
+      .join("\n");
+
+    await reportProgress("Analyse des policies");
+
+    // Crawl the public storefront (home, policies, pages, products). A crawl
+    // failure must not break the audit, so degrade to an empty result.
+    let crawl: CrawlResult;
+    try {
+      crawl = await crawlStorefront(shop, handles);
+    } catch (err) {
+      crawl = { locked: false, pages: [] };
+      warnings.push(`crawl: ${String(err)}`);
+    }
+
+    await reportProgress("Analyse GMC");
+
+    // Real Merchant Center status for the shop owner, when a Google account is
+    // connected. Any failure (no token, API error) must not block the audit.
+    let gmcStatus: MerchantStatus | null = null;
+    let gmcConnected = false;
+    try {
+      const googleTok = await getGoogleTokenForUser(userId);
+      if (googleTok) {
+        gmcConnected = true;
+        gmcStatus = await getMerchantStatus(
+          googleTok.refresh_token,
+          googleTok.merchant_account_id,
+        );
+      }
+    } catch (err) {
+      gmcStatus = null;
+      warnings.push(`gmc: ${String(err)}`);
+    }
+
+    // Build the Merchant Center section. Any part that came back as a structured
+    // API error is replaced with an honest factual line, never sent to Claude as
+    // if it were real data (which would let the model hallucinate on error JSON).
+    let gmcSection: string;
+    if (!gmcStatus) {
+      gmcSection =
+        "Aucun compte Google Merchant Center connecte pour ce marchand. " +
+        'Mets "source": "site" sur chaque issue.';
+    } else {
+      const lines: string[] = [];
+      if (isMerchantApiError(gmcStatus.accountIssues)) {
+        lines.push(
+          `Le statut Merchant Center n'a pas pu etre lu (erreur technique ${gmcStatus.accountIssues.apiError.status}).`,
+        );
+      } else {
+        lines.push(
+          "ACCOUNT ISSUES:\n" + JSON.stringify(gmcStatus.accountIssues),
+        );
+      }
+      if (isMerchantApiError(gmcStatus.products)) {
+        lines.push(
+          `Les problemes produit Merchant Center n'ont pas pu etre lus (erreur technique ${gmcStatus.products.apiError.status}).`,
+        );
+      } else if (gmcStatus.products != null) {
+        lines.push("PRODUCTS:\n" + JSON.stringify(gmcStatus.products));
+      }
+      lines.push(
+        "Compare les risques detectes sur le site avec les account issues " +
+          "disponibles ci-dessus. Ne traite pas une erreur technique comme une " +
+          'issue Merchant Center. Marque chaque issue du rapport avec le champ ' +
+          '"source" ("site", "gmc_confirmed" ou "both").',
+      );
+      gmcSection = lines.join("\n\n");
+    }
+
+    await reportProgress("Generation du rapport");
+
+    const anthropic = new Anthropic({ apiKey });
+    const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+
     const msg = await anthropic.messages.create({
       model,
       max_tokens: 8000,
@@ -444,11 +665,21 @@ export async function runAuditForShop(opts: {
           role: "user",
           content:
             "Here is the Shopify store snapshot to audit.\n\n" +
-            "1) PRODUCT DATA (JSON):\n" +
-            JSON.stringify(shopData?.data ?? shopData) +
-            "\n\n1b) PRODUCT & VARIANT ID INDEX (copy these ids verbatim into " +
+            "1) SHOP (JSON):\n" +
+            JSON.stringify(shopInfo?.shop ?? null) +
+            `\n\n1a) PRODUCTS: ${productEdges.length} active product(s) loaded` +
+            (productsTotal != null ? ` out of ${productsTotal} active total` : "") +
+            ".\n\n1b) PRODUCT DATA (JSON):\n" +
+            JSON.stringify({ edges: productEdges }) +
+            "\n\n1c) PRODUCT & VARIANT ID INDEX (copy these ids verbatim into " +
             "patch.targetId / patch.targetHandle, never invent them):\n" +
             (idIndex || "(no product returned)") +
+            "\n\n1d) SHIPPING ZONES / RATES (JSON, may be empty if unavailable):\n" +
+            JSON.stringify(shippingData ?? null) +
+            "\n\n1e) MARKETS (JSON, may be empty if unavailable). The shop's " +
+            "primary currency for this audit is shop.currencyCode above; " +
+            "never invent a conversion for a secondary market currency:\n" +
+            JSON.stringify(marketsData ?? null) +
             "\n\n2) PUBLIC STOREFRONT CONTENT (JSON):\n" +
             JSON.stringify(crawl) +
             (crawl.locked
@@ -472,14 +703,48 @@ export async function runAuditForShop(opts: {
     if (!toolBlock) {
       // The paid call happened but returned nothing usable: mark the reserved
       // row failed so it still counts, then surface a typed error.
-      await markAuditFailed(auditId).catch(() => {});
+      await markAuditFailed(
+        auditId,
+        "L'analyse a echoue, votre credit n'a pas ete consomme",
+      ).catch(() => {});
       throw new ModelNoToolBlock(msg.stop_reason ?? null);
     }
 
     const audit = toolBlock.input as Record<string, unknown>;
     const overall = (audit.overall as string) ?? "unknown";
+    const truncated = msg.stop_reason === "max_tokens";
 
-    await markAuditDone(auditId, overall, audit).catch(() => {
+    // Real per-field values read straight from the Admin API above (not
+    // Claude's transcription of them), keyed the same way /api/fix builds its
+    // lookup key. Used as the drift baseline so a long descriptionHtml the
+    // model paraphrased in its "currentValue" never causes a false drift.
+    const fieldSnapshots: Record<string, string> = {};
+    for (const edge of productEdges) {
+      const p = edge?.node;
+      if (!p?.id) continue;
+      if (typeof p.descriptionHtml === "string") {
+        fieldSnapshots[`${p.id}|descriptionHtml`] = p.descriptionHtml;
+      }
+      if (p.seo?.title != null) {
+        fieldSnapshots[`${p.id}|seo_title`] = p.seo.title ?? "";
+      }
+      if (p.seo?.description != null) {
+        fieldSnapshots[`${p.id}|seo_description`] = p.seo.description ?? "";
+      }
+      for (const vEdge of p.variants?.edges ?? []) {
+        const v = vEdge?.node;
+        if (v?.id) {
+          fieldSnapshots[`${v.id}|compareAtPrice`] = v.compareAtPrice ?? "";
+        }
+      }
+    }
+
+    await markAuditDone(auditId, overall, audit, {
+      model,
+      truncated,
+      gmcConnected,
+      fieldSnapshots,
+    }).catch(() => {
       // persistence must never break returning the audit to the caller
     });
 
@@ -488,13 +753,21 @@ export async function runAuditForShop(opts: {
       audit,
       overall,
       model,
-      truncated: msg.stop_reason === "max_tokens",
+      truncated,
+      gmcConnected,
+      productsAudited: productEdges.length,
+      productsTotal,
+      warnings,
     };
   } catch (err) {
     if (err instanceof ModelNoToolBlock) throw err;
-    // The call was engaged but errored: keep the reserved row as 'failed' so
-    // the attempt is accounted for (the Claude cost was paid).
-    await markAuditFailed(auditId).catch(() => {});
+    // The call was engaged but errored (Shopify or Claude side): keep the
+    // reserved row as 'failed' so the attempt is accounted for, with a message
+    // the merchant can read, and note the quota was not actually spent.
+    await markAuditFailed(
+      auditId,
+      "L'analyse a echoue, votre credit n'a pas ete consomme",
+    ).catch(() => {});
     throw err;
   }
 }

@@ -9,6 +9,7 @@ import {
 } from "../../../lib/shopifyToken";
 import { getEntitlements } from "../../../lib/entitlements";
 import { recordFix } from "../../../lib/fixHistory";
+import { getAuditById, updateFieldSnapshot } from "../../../lib/audits";
 import {
   APPLICABLE_FIX_TYPES,
   norm,
@@ -87,6 +88,25 @@ export async function POST(req: NextRequest) {
 
   const newValue = patch.newValue ?? "";
 
+  // The audit-time baseline for drift detection. Prefer the real value read
+  // straight from the Admin API when the audit reserved one (auditEngine's
+  // field_snapshots), since patch.currentValue is Claude's transcription of
+  // that value and is not guaranteed byte-exact for long HTML - relying on it
+  // alone caused spurious "modified since the audit" drift on a first-ever
+  // apply. Falls back to patch.currentValue for older audits or fields not
+  // snapshotted (e.g. policy_body).
+  let capturedValue = patch.currentValue ?? "";
+  let snapshotKey: string | null = null;
+  if (body.auditId && patch.targetId && patch.field) {
+    const auditRow = await getAuditById(body.auditId, userId).catch(() => null);
+    const key = `${patch.targetId}|${patch.field}`;
+    const snapshots = auditRow?.field_snapshots;
+    if (snapshots && Object.prototype.hasOwnProperty.call(snapshots, key)) {
+      snapshotKey = key;
+      capturedValue = snapshots[key];
+    }
+  }
+
   try {
     // Resolve the target and read its live value.
     const target = await resolveTarget(shop, token, fixType, patch);
@@ -95,7 +115,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { currentLive } = target;
-    const drift = norm(currentLive) !== norm(patch.currentValue ?? "");
+    const drift = norm(currentLive) !== norm(capturedValue);
 
     // preview: report the live value and whether it drifted, never write.
     if (mode === "preview") {
@@ -113,7 +133,7 @@ export async function POST(req: NextRequest) {
       return jsonResponse({
         status: "drift",
         currentLive,
-        capturedValue: patch.currentValue ?? "",
+        capturedValue,
         newValue,
         drift: true,
       });
@@ -123,6 +143,13 @@ export async function POST(req: NextRequest) {
     const userErrors = await target.write(newValue);
     if (userErrors.length) {
       return jsonResponse({ status: "error", userErrors }, { status: 502 });
+    }
+
+    // Keep the snapshot fresh so a second fix on the same field within the
+    // same audit (e.g. a retried "Tout corriger" batch) compares against what
+    // we just wrote, not the stale audit-time value.
+    if (body.auditId && snapshotKey) {
+      await updateFieldSnapshot(body.auditId, snapshotKey, newValue).catch(() => {});
     }
 
     const fixId = await recordFix({

@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
-// --- Audit contract types (see app/api/audit/route.ts) ---
+// --- Audit contract types (see app/api/audits/route.ts) ---
 type Overall = "go" | "warning" | "no-go";
 type Severity = "high" | "medium" | "low";
 type Area =
@@ -56,18 +56,25 @@ interface Entitlements {
 }
 
 interface AuditResponse {
+  auditId: string;
   shop: string;
   model: string;
   truncated: boolean;
+  gmcConnected: boolean;
   audit: Audit;
   entitlements?: Entitlements;
 }
 
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 6 * 60 * 1000;
+
 type State =
-  | { status: "loading" }
+  | { status: "idle" }
+  | { status: "loading"; progressStep: string | null }
   | { status: "ok"; data: AuditResponse }
   | { status: "not-connected" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string }
+  | { status: "timeout" };
 
 // --- Presentation config ---
 const VERDICT: Record<
@@ -100,11 +107,10 @@ const SEVERITY: Record<Severity, { label: string; chip: string }> = {
   low: { label: "Mineur", chip: "bg-slate-soft text-slate" },
 };
 
-const SOURCE: Record<IssueSource, { label: string; chip: string }> = {
-  site: {
-    label: "Risque detecte (non confirme)",
-    chip: "bg-warn-soft text-warn",
-  },
+// Only a Merchant Center match is worth a badge. "site"-only issues used to
+// show a "RISK DETECTED (NOT CONFIRMED)" tag on every single card; that is
+// replaced by the single banner at the top of the report (see GmcBanner).
+const SOURCE: Partial<Record<IssueSource, { label: string; chip: string }>> = {
   gmc_confirmed: {
     label: "Confirme par Google",
     chip: "bg-nogo-soft text-nogo",
@@ -149,58 +155,127 @@ function Masthead({ shop }: { shop?: string }) {
 function ReportInner() {
   const params = useSearchParams();
   const shop = params.get("shop")?.trim().toLowerCase() ?? "";
-  const [state, setState] = useState<State>(() =>
-    shop
-      ? { status: "loading" }
-      : { status: "error", message: "Aucune boutique indiquee dans l'URL." },
+  const [state, setState] = useState<State>(
+    shop ? { status: "idle" } : { status: "error", message: "Aucune boutique indiquee dans l'URL." },
   );
+  // Bumped on every retry so a poll loop from a previous attempt stops itself
+  // instead of racing the new one.
+  const runId = useRef(0);
 
-  // Fetch only sets state after an await, so it is safe to call from an effect.
-  const load = useCallback(async () => {
+  const start = useCallback(async () => {
+    const myRun = ++runId.current;
+    setState({ status: "loading", progressStep: null });
+
+    let auditId: string;
     try {
-      const res = await fetch(`/api/audit?shop=${encodeURIComponent(shop)}`);
+      const res = await fetch("/api/audits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shop }),
+      });
       if (res.status === 404) {
-        setState({ status: "not-connected" });
+        if (runId.current === myRun) setState({ status: "not-connected" });
         return;
       }
       const body = await res.json().catch(() => null);
-      if (!res.ok) {
+      if (!res.ok || !body?.auditId) {
         const message =
           (body && (body.detail || body.error)) ||
           `L'audit a echoue (code ${res.status}).`;
-        setState({ status: "error", message });
+        if (runId.current === myRun) setState({ status: "error", message });
         return;
       }
-      setState({ status: "ok", data: body as AuditResponse });
+      auditId = body.auditId as string;
     } catch {
-      setState({
-        status: "error",
-        message:
-          "Impossible de joindre le serveur d'audit. Verifie ta connexion et reessaie.",
-      });
+      if (runId.current === myRun) {
+        setState({
+          status: "error",
+          message:
+            "Impossible de joindre le serveur d'audit. Verifie ta connexion et reessaie.",
+        });
+      }
+      return;
     }
+
+    const startedAt = Date.now();
+
+    const poll = async () => {
+      if (runId.current !== myRun) return;
+
+      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        setState({ status: "timeout" });
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/audits/${auditId}`);
+        if (runId.current !== myRun) return;
+        const body = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          const message =
+            (body && (body.detail || body.error)) ||
+            `L'audit a echoue (code ${res.status}).`;
+          setState({ status: "error", message });
+          return;
+        }
+
+        if (body.status === "done") {
+          setState({ status: "ok", data: body as AuditResponse });
+          return;
+        }
+
+        if (body.status === "failed") {
+          setState({
+            status: "error",
+            message: body.error || "L'analyse a echoue.",
+          });
+          return;
+        }
+
+        // queued or running: keep polling and surface the current step.
+        setState({ status: "loading", progressStep: body.progressStep ?? null });
+        setTimeout(poll, POLL_INTERVAL_MS);
+      } catch {
+        if (runId.current !== myRun) return;
+        setState({
+          status: "error",
+          message:
+            "Impossible de joindre le serveur d'audit. Verifie ta connexion et reessaie.",
+        });
+      }
+    };
+
+    setTimeout(poll, POLL_INTERVAL_MS);
   }, [shop]);
 
   const retry = useCallback(() => {
-    setState({ status: "loading" });
-    void load();
-  }, [load]);
+    void start();
+  }, [start]);
 
   useEffect(() => {
-    // Fetch-on-mount: load() only calls setState after an await, so no
-    // synchronous cascade despite what the static rule assumes.
+    // start() only calls setState after an await, so no synchronous cascade.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (shop) void load();
-  }, [shop, load]);
+    if (shop) void start();
+  }, [shop, start]);
 
   return (
     <main className="flex-1 flex flex-col">
       <Masthead shop={shop || undefined} />
       <div className="mx-auto w-full max-w-3xl px-5 py-10 flex-1">
-        {state.status === "loading" && <LoadingView />}
+        {state.status === "idle" && <LoadingView progressStep={null} />}
+        {state.status === "loading" && (
+          <LoadingView progressStep={state.progressStep} />
+        )}
         {state.status === "not-connected" && <NotConnectedView shop={shop} />}
         {state.status === "error" && (
           <ErrorView message={state.message} onRetry={retry} />
+        )}
+        {state.status === "timeout" && (
+          <ErrorView
+            message="L'audit prend plus de temps que prevu et a ete interrompu. Reessaie dans un instant."
+            onRetry={retry}
+          />
         )}
         {state.status === "ok" && (
           <ResultView data={state.data} onRetry={retry} />
@@ -210,17 +285,17 @@ function ReportInner() {
   );
 }
 
-function LoadingView() {
+function LoadingView({ progressStep }: { progressStep: string | null }) {
   return (
     <section className="rise max-w-lg mx-auto text-center py-16">
       <p className="tech-label text-brand mb-4">Inspection en cours</p>
       <h1 className="text-2xl font-semibold tracking-tight">
-        Analyse de ta boutique en cours...
+        {progressStep ?? "Analyse de ta boutique en cours..."}
       </h1>
       <p className="mt-3 text-muted leading-relaxed">
         On lit tes donnees produit et on les confronte aux regles Google
-        Merchant Center. Cela prend generalement 10 a 30 secondes. Reste sur la
-        page.
+        Merchant Center. Cela peut prendre jusqu&apos;a quelques minutes sur
+        une grande boutique. Reste sur la page.
       </p>
       <div className="scan-track h-1 rounded-full mt-8" aria-hidden="true" />
       <p className="sr-only" role="status">
@@ -273,8 +348,8 @@ function ErrorView({
       </p>
       <p className="mt-4 text-muted leading-relaxed">
         Verifie le domaine de la boutique, puis relance. Si le probleme
-        persiste, reessaie dans une minute - l&apos;analyse peut expirer si la
-        boutique est lente a repondre.
+        persiste, reessaie dans une minute - l&apos;analyse peut prendre plus
+        de temps si la boutique est lente a repondre.
       </p>
       <button
         onClick={onRetry}
@@ -283,6 +358,21 @@ function ErrorView({
         Reessayer
       </button>
     </section>
+  );
+}
+
+// Shown once at the top of the report instead of a per-issue "not confirmed"
+// tag: the site-detected risks below have not been cross-checked against real
+// Merchant Center account issues.
+function GmcBanner() {
+  return (
+    <div className="rounded-2xl border border-line bg-ink-soft px-4 py-3 text-sm text-muted">
+      Connectez Google Merchant Center pour croiser ces risques avec les
+      signalements reels de Google.{" "}
+      <Link href="/dashboard" className="text-brand underline">
+        Connecter Google Merchant Center
+      </Link>
+    </div>
   );
 }
 
@@ -302,9 +392,14 @@ function ResultView({
   // response), default to allowed - the /api/fix route still enforces access
   // server-side, so a stale-true here is refused with a 403 on click.
   const canApplyFixes = data.entitlements?.canApplyFixes ?? true;
+  const autoPatches = issues
+    .map((issue) => issue.patch)
+    .filter((p): p is FixPatch => Boolean(p?.autoApplicable));
 
   return (
     <div className="rise space-y-8">
+      {!data.gmcConnected && <GmcBanner />}
+
       {/* Verdict panel */}
       <section
         className={`bg-ink-soft border border-line ${verdict.rail} border-l-4 rounded-2xl p-6`}
@@ -347,9 +442,18 @@ function ResultView({
 
       {/* Issues */}
       <section>
-        <h2 className="tech-label text-faint mb-4">
-          Problemes detectes ({issues.length})
-        </h2>
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+          <h2 className="tech-label text-faint">
+            Problemes detectes ({issues.length})
+          </h2>
+          {canApplyFixes && autoPatches.length > 0 && (
+            <FixAllActions
+              shop={data.shop}
+              auditId={data.auditId}
+              patches={autoPatches}
+            />
+          )}
+        </div>
         {issues.length === 0 ? (
           <p className="bg-ink-soft border border-line rounded-2xl p-6 text-muted">
             Aucun probleme detecte sur les donnees inspectees.
@@ -361,6 +465,7 @@ function ResultView({
                 key={i}
                 issue={issue}
                 shop={data.shop}
+                auditId={data.auditId}
                 canApplyFixes={canApplyFixes}
               />
             ))}
@@ -393,16 +498,112 @@ function ResultView({
   );
 }
 
+// "Tout corriger": applies every auto-applicable patch in sequence, one write
+// at a time, and shows a recap. Runs independently of each IssueCard's own
+// Previsualiser/Appliquer buttons, which remain available per-issue.
+type BatchOutcome = "applied" | "skipped" | "error";
+function FixAllActions({
+  shop,
+  auditId,
+  patches,
+}: {
+  shop: string;
+  auditId: string;
+  patches: FixPatch[];
+}) {
+  const [running, setRunning] = useState(false);
+  const [recap, setRecap] = useState<{
+    applied: number;
+    skipped: { patch: FixPatch; reason: string }[];
+  } | null>(null);
+
+  const runAll = async () => {
+    setRunning(true);
+    setRecap(null);
+    let applied = 0;
+    const skipped: { patch: FixPatch; reason: string }[] = [];
+
+    for (const patch of patches) {
+      let outcome: BatchOutcome = "error";
+      let reason = "Une erreur est survenue.";
+      try {
+        const res = await fetch("/api/fix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shop, patch, mode: "apply", auditId }),
+        });
+        const body = await res.json().catch(() => null);
+        if (res.ok && body?.status === "applied") {
+          outcome = "applied";
+        } else if (body?.status === "drift") {
+          outcome = "skipped";
+          reason = "Modifie depuis l'audit - relancez un audit.";
+        } else {
+          outcome = "skipped";
+          reason =
+            (body?.userErrors?.length &&
+              body.userErrors.map((e: { message: string }) => e.message).join(" ")) ||
+            body?.message ||
+            body?.error ||
+            "Une erreur est survenue.";
+        }
+      } catch {
+        outcome = "skipped";
+        reason = "Le serveur est injoignable.";
+      }
+
+      if (outcome === "applied") applied += 1;
+      else skipped.push({ patch, reason });
+    }
+
+    setRecap({ applied, skipped });
+    setRunning(false);
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <button
+        onClick={runAll}
+        disabled={running}
+        className="bg-ink text-paper hover:bg-white font-medium rounded-full px-4 py-2 text-sm transition-colors disabled:opacity-50"
+      >
+        {running ? "Application en cours..." : `Tout corriger (${patches.length})`}
+      </button>
+      {recap && (
+        <p className="text-sm text-muted text-right">
+          {recap.applied} applique{recap.applied > 1 ? "s" : ""}, {recap.skipped.length}{" "}
+          ignore{recap.skipped.length > 1 ? "s" : ""}
+          {recap.skipped.length > 0 && (
+            <>
+              {" "}
+              (
+              {recap.skipped
+                .map((s) => s.reason)
+                .filter((r, i, arr) => arr.indexOf(r) === i)
+                .join(", ")}
+              )
+            </>
+          )}
+          . Recharge la page pour voir les correctifs a jour.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function IssueCard({
   issue,
   shop,
+  auditId,
   canApplyFixes,
 }: {
   issue: Issue;
   shop: string;
+  auditId: string;
   canApplyFixes: boolean;
 }) {
   const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
+  const sourceBadge = issue.source ? SOURCE[issue.source] : undefined;
   return (
     <li className="bg-ink-soft border border-line rounded-2xl p-5">
       <div className="flex items-center gap-2 flex-wrap">
@@ -412,11 +613,9 @@ function IssueCard({
         <span className="tech-label rounded-full px-2 py-1 bg-slate-soft text-slate">
           {AREA_LABEL[issue.area] ?? issue.area}
         </span>
-        {issue.source && SOURCE[issue.source] && (
-          <span
-            className={`tech-label rounded-full px-2 py-1 ${SOURCE[issue.source].chip}`}
-          >
-            {SOURCE[issue.source].label}
+        {sourceBadge && (
+          <span className={`tech-label rounded-full px-2 py-1 ${sourceBadge.chip}`}>
+            {sourceBadge.label}
           </span>
         )}
         {issue.product && (
@@ -430,13 +629,29 @@ function IssueCard({
         <p className="tech-label text-brand mb-1">Correctif</p>
         <p className="text-ink leading-relaxed">{issue.fix}</p>
       </div>
-      {issue.patch?.autoApplicable &&
-        (canApplyFixes ? (
-          <FixActions shop={shop} patch={issue.patch} />
+      {issue.patch?.autoApplicable ? (
+        canApplyFixes ? (
+          <FixActions shop={shop} auditId={auditId} patch={issue.patch} />
         ) : (
           <FixLocked />
-        ))}
+        )
+      ) : (
+        <ManualFix />
+      )}
     </li>
+  );
+}
+
+// Issues whose patch is not auto-applicable (fixType "manual_only", "theme",
+// "page", "business_identity", or no patch at all) never get a write button -
+// only the "Correctif" text above, which already carries the exact steps.
+function ManualFix() {
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <p className="tech-label text-faint">
+        A corriger manuellement dans Shopify Admin, voir le correctif ci-dessus.
+      </p>
+    </div>
   );
 }
 
@@ -501,7 +716,15 @@ type FixResult =
   | ErrorResult
   | RevertedResult;
 
-function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
+function FixActions({
+  shop,
+  auditId,
+  patch,
+}: {
+  shop: string;
+  auditId: string;
+  patch: FixPatch;
+}) {
   const [busy, setBusy] = useState<null | "preview" | "apply" | "revert">(null);
   const [result, setResult] = useState<FixResult | null>(null);
 
@@ -520,7 +743,7 @@ function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
       const res = await fetch("/api/fix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop, patch, mode: "preview" }),
+        body: JSON.stringify({ shop, patch, mode: "preview", auditId }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
@@ -546,7 +769,7 @@ function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
       const res = await fetch("/api/fix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop, patch, mode: "apply" }),
+        body: JSON.stringify({ shop, patch, mode: "apply", auditId }),
       });
       const body = await res.json().catch(() => null);
       if (res.ok && body?.status === "applied") {
@@ -656,7 +879,7 @@ function FixActions({ shop, patch }: { shop: string; patch: FixPatch }) {
 
       {result?.kind === "drift" && (
         <p className="mt-3 text-sm text-warn font-medium">
-          Modifie depuis l&apos;audit - non ecrit.
+          Ce champ a ete modifie depuis l&apos;audit - relancez un audit.
         </p>
       )}
 
@@ -680,7 +903,7 @@ function LoadingShell() {
     <main className="flex-1 flex flex-col">
       <Masthead />
       <div className="mx-auto w-full max-w-3xl px-5 py-10 flex-1">
-        <LoadingView />
+        <LoadingView progressStep={null} />
       </div>
     </main>
   );
