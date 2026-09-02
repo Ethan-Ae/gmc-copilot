@@ -290,16 +290,21 @@ function LoadingView({ progressStep }: { progressStep: string | null }) {
     <section className="rise max-w-lg mx-auto text-center py-16">
       <p className="tech-label text-brand mb-4">Inspection en cours</p>
       <h1 className="text-2xl font-semibold tracking-tight">
-        {progressStep ?? "Analyse de ta boutique en cours..."}
+        Analyse de votre boutique en cours
       </h1>
+      {progressStep && (
+        <p className="mt-2 tech-label text-faint" role="status">
+          {progressStep}
+        </p>
+      )}
       <p className="mt-3 text-muted leading-relaxed">
-        On lit tes donnees produit et on les confronte aux regles Google
-        Merchant Center. Cela peut prendre jusqu&apos;a quelques minutes sur
-        une grande boutique. Reste sur la page.
+        Nous lisons vos données produit et les confrontons aux règles Google
+        Merchant Center. Cela peut prendre jusqu&apos;à quelques minutes sur
+        une grande boutique. Restez sur la page.
       </p>
       <div className="scan-track h-1 rounded-full mt-8" aria-hidden="true" />
       <p className="sr-only" role="status">
-        Audit en cours, patiente.
+        Audit en cours, patientez.
       </p>
     </section>
   );

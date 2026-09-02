@@ -7,18 +7,28 @@ import {
   getShopifyAccessToken,
   ShopifyReauthRequired,
 } from "../../../lib/shopifyToken";
-import { countAuditsForUserSince, createQueuedAudit } from "../../../lib/audits";
+import {
+  countAuditsForUserSince,
+  createQueuedAudit,
+  markAuditFailed,
+} from "../../../lib/audits";
 import { getEntitlements } from "../../../lib/entitlements";
 import { limitsForPlan, startOfMonthUtc } from "../../../lib/plans";
+import { runAuditForShop } from "../../../lib/auditEngine";
 
 export const runtime = "nodejs";
-export const maxDuration = 15;
+export const maxDuration = 300;
 
-// Starts an audit and returns immediately: the actual Shopify + Claude work
-// happens in POST /api/audits/[id]/run, which has its own 300s budget. This
-// route only has to validate, reserve the quota row, and hand off - so it
-// never risks the 504 the previous synchronous /api/audit route could hit on
-// a slow or large store.
+// Starts an audit and returns immediately: the response is sent as soon as
+// the quota row is reserved, but the actual Shopify + Claude work runs in the
+// after() callback below, in the same invocation, so it survives past the
+// response. An earlier version fired an unawaited fetch to
+// POST /api/audits/[id]/run instead: on Vercel that request could be killed
+// once this function returned, since nothing guaranteed the new invocation it
+// triggered would actually run to completion. after() does not have that
+// problem - Vercel keeps this invocation alive until the after() callback
+// settles. POST /api/audits/[id]/run itself is kept as a manual fallback (it
+// re-runs a still-queued row) but is no longer relied on for the normal path.
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
@@ -63,11 +73,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // The token is fetched here only to fail fast with a clear error before
-  // reserving quota. The worker route re-fetches it itself rather than
-  // carrying it over the wire.
+  // Fetched here both to fail fast with a clear error before reserving quota,
+  // and to reuse for the after() audit run below instead of fetching it a
+  // second time.
+  let token: string;
   try {
-    await getShopifyAccessToken(shop);
+    token = await getShopifyAccessToken(shop);
   } catch (err) {
     if (err instanceof ShopifyReauthRequired) {
       return jsonResponse(
@@ -85,23 +96,27 @@ export async function POST(req: NextRequest) {
   // previous synchronous flow did right before the paid call.
   const auditId = await createQueuedAudit(userId, shop, "manual");
 
-  const secret = process.env.AUDIT_WORKER_SECRET;
-  const runUrl = new URL(`/api/audits/${auditId}/run`, req.nextUrl.origin);
-
-  const trigger = () =>
-    fetch(runUrl, {
-      method: "POST",
-      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
-    }).catch(() => {
-      // The worker route itself marks the row 'failed' on any internal error.
-      // A failure to even reach it here is surfaced to the merchant only
-      // through the poll timing out; nothing else to do with the response.
-    });
-
-  // after() keeps this function alive just long enough to fire the request to
-  // the worker route, without extending this route's own maxDuration - the
-  // actual audit work happens in that separate, longer-lived invocation.
-  after(trigger);
+  // Run the audit itself after the response is sent, in this same
+  // invocation. runAuditForShop already marks the row 'failed' on any
+  // internal error; the catch here is a safety net for anything that could
+  // throw before reaching that (e.g. a rejected promise from a bug), so the
+  // row is never left stuck at 'queued'.
+  after(async () => {
+    try {
+      await runAuditForShop({
+        userId,
+        shop,
+        token,
+        source: "manual",
+        auditId,
+      });
+    } catch (err) {
+      await markAuditFailed(
+        auditId,
+        err instanceof Error ? err.message : String(err),
+      ).catch(() => {});
+    }
+  });
 
   return jsonResponse({ auditId, status: "queued" }, { status: 202 });
 }

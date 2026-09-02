@@ -14,10 +14,12 @@ import { runAuditForShop } from "../../../../../lib/auditEngine";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// Does the actual audit work: Shopify reads + the Claude call. Triggered from
-// POST /api/audits right after it reserves the row, authenticated with a
-// shared secret instead of a Clerk session since it is a server-to-server
-// call, not a browser request.
+// Does the actual audit work: Shopify reads + the Claude call. POST /api/audits
+// now runs this same work directly in its own after() callback, so this route
+// is a manual fallback only: it re-runs a row still stuck at 'queued' (e.g. if
+// the after() callback itself failed to run), authenticated with a shared
+// secret instead of a Clerk session since it is a server-to-server call, not a
+// browser request.
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
