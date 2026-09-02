@@ -1,7 +1,10 @@
 // Public storefront crawler used by the audit engine.
-// It fetches the home page, the default Shopify policy pages, the contact/about
-// pages, and a few product pages, then returns stripped plain text so the
-// auditor can check policies, storefront claims, and cross-surface consistency.
+// It fetches the home page, the contact/about pages, and a few product pages,
+// then returns stripped plain text so the auditor can check theme content
+// (FAQ, footer, banners) and storefront claims. Policy pages are NOT crawled
+// here: policy content is read authoritatively from the Shopify Admin API
+// (shop.shopPolicies in lib/auditEngine.ts) so it is available even when the
+// storefront is password protected.
 
 export interface CrawledPage {
   url: string;
@@ -18,19 +21,10 @@ const PAGE_TIMEOUT_MS = 6000;
 const MAX_CHARS = 3000;
 const MAX_PRODUCTS = 3;
 
-// Default Shopify surfaces that matter for a GMC review. Contact/about may 404
-// on stores that never created them; that is handled gracefully by the caller.
-const STATIC_PATHS = [
-  "/",
-  "/policies/refund-policy",
-  "/policies/shipping-policy",
-  "/policies/privacy-policy",
-  "/policies/terms-of-service",
-  "/policies/legal-notice",
-  "/policies/subscription-policy",
-  "/pages/contact",
-  "/pages/about",
-];
+// Default Shopify theme surfaces that matter for a GMC review. Contact/about
+// may 404 on stores that never created them; that is handled gracefully by
+// the caller. Policy pages are intentionally excluded (see file header).
+const STATIC_PATHS = ["/", "/pages/contact", "/pages/about"];
 
 interface RawPage {
   url: string;

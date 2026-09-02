@@ -49,14 +49,21 @@ const SYSTEM = `${GMC_SKILL}
 
 <role>
 You are a strict Google Merchant Center (GMC) compliance auditor.
-You are given a snapshot of a Shopify store made of two parts:
+You are given a snapshot of a Shopify store made of three parts:
 1. PRODUCT DATA from the Shopify Admin API: shop identity and products.
 2. PUBLIC STOREFRONT CONTENT crawled from the live site: the home page, the
-   default Shopify policy pages (refund, shipping, privacy, terms of service,
-   legal notice, subscription), the contact and about pages, and up to 3 product
-   pages. Each crawled page has a url, an HTTP status, and plain text (truncated).
-   status 0 means the page could not be fetched; 404 means it does not exist;
-   empty text means nothing usable was returned for that page.
+   contact and about pages, and up to 3 product pages. This covers theme
+   content only (FAQ, footer, banners, on-page claims) - policy pages are NOT
+   part of this crawl, see part 3 below. Each crawled page has a url, an HTTP
+   status, and plain text (truncated). status 0 means the page could not be
+   fetched; 404 means it does not exist; empty text means nothing usable was
+   returned for that page.
+
+3. STORE POLICIES from the Shopify Admin API (shop.shopPolicies): shipping,
+   refund, privacy, terms of service, legal notice and subscription policy,
+   each with its type and body. This is the authoritative source for policy
+   content - it is available even when the storefront is password protected,
+   since it does not depend on crawling the public site.
 
 You do NOT have Merchant Center data or the feed app in this snapshot.
 
@@ -70,12 +77,17 @@ titles/descriptions/SEO, suspicious compare-at prices, missing or weak product
 data, availability/status mismatches, and anything that reads like marketing
 hype rather than a verifiable fact.
 
-Audit the STOREFRONT CONTENT in addition:
-- Policy completeness and consistency. Shipping (area "shipping"): delivery time,
-  cost, target countries, processing/cutoff. Returns/refunds (area "returns"):
-  return window, fees, damaged goods, refund processing time. Contact details and
-  legal notice / business identity (area "policy"). Flag a required policy page
-  that is missing (status 404) and that GMC relies on.
+Audit the STORE POLICIES (part 3) in addition:
+- Policy completeness and consistency, using the real Admin API body of each
+  policy. Shipping (area "shipping"): delivery time, cost, target countries,
+  processing/cutoff. Returns/refunds (area "returns"): return window, fees,
+  damaged goods, refund processing time. Contact details and legal notice /
+  business identity (area "policy"). Flag a required policy whose body is
+  empty and that GMC relies on. Policies are always available from the Admin
+  API, regardless of whether the storefront is password protected, so audit
+  them normally in every case.
+
+Audit the STOREFRONT CONTENT (part 2, theme pages) in addition:
 - Unsupported claims on the storefront (area "claims"): fake or unverifiable
   reviews, star ratings, trust badges, warranties or guarantees not backed by a
   policy, "free delivery" that is not justified, scarcity or urgency, unrealistic
@@ -83,10 +95,15 @@ Audit the STOREFRONT CONTENT in addition:
 - Consistency between policies, storefront text, and product data: shipping and
   return terms, currency, prices, availability, business identity, contact.
 
-If the store is locked behind a Shopify password page, you will be told so.
-Still audit the product data, and report the locked storefront as an issue with
-area "theme" (it blocks a real GMC crawl), noting that policies and storefront
-claims could not be verified.
+If the storefront (part 2) is locked behind a Shopify password page, you will
+be told so. This only affects theme content (FAQ, footer, banners, on-page
+claims) - it does NOT affect policies, which come from the Admin API and are
+still fully auditable. Still audit the product data and the policies as usual,
+and report the password lock as EXACTLY ONE issue (area "theme", fixType
+"manual_only", problem "Boutique protégée par mot de passe" or equivalent).
+Do not repeat the password-lock reason inside any other issue - every other
+issue must be justified on its own, using the product data and policy data you
+do have.
 
 You may also be given a section "STATUT MERCHANT CENTER REEL" holding the live
 Merchant Center status (account issues and product issues) for this merchant.
@@ -130,7 +147,9 @@ exact replacement:
   Never emit a half-filled patch; a patch with a missing or guessed targetId is
   worse than no patch at all.
 
-Write the summary, problem, and fix fields in FRENCH. Keep overall, area,
+Write the summary, problem, and fix fields in FRENCH, with correct spelling and
+accents (é, è, ê, à, ù, ç, î, ô...) - never strip them, e.g. write "protégée",
+"données", "règles", not "protegee", "donnees", "regles". Keep overall, area,
 severity, source, and every "patch" enum/id/value as the English codes and raw
 values defined by the tool. In any text you write, do not use long dashes; use
 "-". Keep each issue concise.
@@ -469,6 +488,25 @@ export async function runAuditForShop(opts: {
       warnings,
     );
 
+    // Authoritative policy content from the Admin API: shipping, refund,
+    // privacy, terms of service, legal notice and subscription policy, each
+    // with its type and body. Read this way (not by crawling the storefront)
+    // so it is always available even when the storefront is password
+    // protected. `type` matches the values resolvePolicy/shopPolicyUpdate use
+    // in lib/shopifyFix.ts (e.g. "REFUND_POLICY"), so the model's patch
+    // targetId lines up with what the fix endpoint expects.
+    const policiesData = await safeShopifyGraphQL<{
+      shop?: { shopPolicies?: { type?: string; body?: string }[] };
+    } | null>(
+      shop,
+      token,
+      `{ shop { shopPolicies { type body } } }`,
+      undefined,
+      null,
+      "policies",
+      warnings,
+    );
+
     const { edges: productEdges, total: productsTotal } =
       await fetchActiveProducts(shop, token, warnings);
 
@@ -680,18 +718,26 @@ export async function runAuditForShop(opts: {
             "primary currency for this audit is shop.currencyCode above; " +
             "never invent a conversion for a secondary market currency:\n" +
             JSON.stringify(marketsData ?? null) +
-            "\n\n2) PUBLIC STOREFRONT CONTENT (JSON):\n" +
+            "\n\n2) PUBLIC STOREFRONT CONTENT (JSON, theme pages only - home, " +
+            "contact, about, product pages; does NOT include policies):\n" +
             JSON.stringify(crawl) +
             (crawl.locked
               ? "\n\nNOTE: the storefront is locked behind a Shopify password " +
-                "page, so policies and storefront claims could not be crawled. " +
-                'Report a locked storefront (area "theme") and still audit the ' +
-                "product data."
+                "page, so theme content (FAQ, footer, banners, on-page claims) " +
+                "could not be crawled. This does NOT affect the policies in " +
+                "section 3 below, which come from the Admin API and remain " +
+                "fully auditable. Report EXACTLY ONE issue for the password " +
+                'lock (area "theme", fixType "manual_only") and still audit ' +
+                "the product data and policies normally. Do not repeat the " +
+                "password-lock reason inside any other issue."
               : "") +
+            "\n\n3) STORE POLICIES FROM THE SHOPIFY ADMIN API (JSON, " +
+            "authoritative - always available regardless of storefront lock):\n" +
+            JSON.stringify(policiesData?.shop?.shopPolicies ?? []) +
             "\n\nSTATUT MERCHANT CENTER REEL:\n" +
             gmcSection +
-            "\n\nWrite the summary, problem, and fix fields in French. " +
-            "Call report_audit with your findings.",
+            "\n\nWrite the summary, problem, and fix fields in French, with " +
+            "correct accents. Call report_audit with your findings.",
         },
       ],
     });
