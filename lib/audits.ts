@@ -32,8 +32,11 @@ async function ensureSchema(): Promise<void> {
   // Human-readable step shown to the merchant while the async worker runs,
   // e.g. "Lecture des produits". Null once the audit is done or failed.
   await sql`alter table audits add column if not exists progress_step text`;
-  // Readable failure reason surfaced to the merchant when status = 'failed'.
+  // Raw failure detail, for debugging only - never sent to the client as-is.
   await sql`alter table audits add column if not exists error_message text`;
+  // Fixed category used to pick the safe, French message shown to the
+  // merchant (see lib/auditErrors.ts). Null on legacy rows -> "unknown".
+  await sql`alter table audits add column if not exists error_code text`;
   // Claude model id and whether the tool response hit max_tokens, persisted so
   // GET /api/audits/[id] can return them without re-deriving anything.
   await sql`alter table audits add column if not exists model text`;
@@ -68,6 +71,7 @@ export type AuditRow = {
   status: AuditStatus;
   progress_step: string | null;
   error_message: string | null;
+  error_code: string | null;
   model: string | null;
   truncated: boolean;
   gmc_connected: boolean;
@@ -173,12 +177,15 @@ export async function updateFieldSnapshot(
 export async function markAuditFailed(
   id: string,
   errorMessage?: string,
+  errorCode?: string,
 ): Promise<void> {
   await ensureSchema();
   const sql = db();
   await sql`
     update audits
-    set status = 'failed', progress_step = null, error_message = ${errorMessage ?? null}
+    set status = 'failed', progress_step = null,
+        error_message = ${errorMessage ?? null},
+        error_code = ${errorCode ?? null}
     where id = ${id}
   `;
 }
@@ -189,7 +196,7 @@ export async function getAuditsForUser(userId: string): Promise<AuditRow[]> {
   const sql = db();
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
-           status, progress_step, error_message, model, truncated, gmc_connected,
+           status, progress_step, error_message, error_code, model, truncated, gmc_connected,
            field_snapshots
     from audits
     where user_id = ${userId} and status = 'done'
@@ -233,7 +240,7 @@ export async function getLatestDoneAuditForShop(
   const sql = db();
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
-           status, progress_step, error_message, model, truncated, gmc_connected,
+           status, progress_step, error_message, error_code, model, truncated, gmc_connected,
            field_snapshots
     from audits
     where shop = ${shop}
@@ -253,7 +260,7 @@ export async function getAuditById(
   const sql = db();
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
-           status, progress_step, error_message, model, truncated, gmc_connected,
+           status, progress_step, error_message, error_code, model, truncated, gmc_connected,
            field_snapshots
     from audits
     where id = ${id} and user_id = ${userId}
@@ -269,7 +276,7 @@ export async function getAuditByIdInternal(id: string): Promise<AuditRow | null>
   const sql = db();
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
-           status, progress_step, error_message, model, truncated, gmc_connected,
+           status, progress_step, error_message, error_code, model, truncated, gmc_connected,
            field_snapshots
     from audits
     where id = ${id}

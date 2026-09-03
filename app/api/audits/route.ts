@@ -15,6 +15,7 @@ import {
 import { getEntitlements } from "../../../lib/entitlements";
 import { limitsForPlan, startOfMonthUtc } from "../../../lib/plans";
 import { runAuditForShop } from "../../../lib/auditEngine";
+import { resolveAuditError } from "../../../lib/auditErrors";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -111,10 +112,12 @@ export async function POST(req: NextRequest) {
         auditId,
       });
     } catch (err) {
-      await markAuditFailed(
-        auditId,
-        err instanceof Error ? err.message : String(err),
-      ).catch(() => {});
+      // runAuditForShop already marks the row 'failed' with a classified
+      // code+message on any internal error; this is a safety net for
+      // anything that could throw before reaching that (e.g. a bug), so raw
+      // detail is logged and stored, never a stale/duplicate write of it.
+      const { code, raw } = resolveAuditError("audits.route.after", err);
+      await markAuditFailed(auditId, raw, code).catch(() => {});
     }
   });
 

@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../lib/apiJson";
 import { getAuditById } from "../../../../lib/audits";
 import { getEntitlements } from "../../../../lib/entitlements";
+import { auditErrorMessage, type AuditErrorCode } from "../../../../lib/auditErrors";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -40,12 +41,13 @@ export async function GET(
   }
 
   if (row.status === "failed") {
+    // Never relay row.error_message (raw technical detail, kept in the DB
+    // for debugging only): the client only ever sees the fixed, safe French
+    // message for the error's category.
     return jsonResponse({
       auditId: row.id,
       status: "failed",
-      error:
-        row.error_message ??
-        "L'analyse a echoue, votre credit n'a pas ete consomme",
+      error: auditErrorMessage(row.error_code as AuditErrorCode | null),
     });
   }
 

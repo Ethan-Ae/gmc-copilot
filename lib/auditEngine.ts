@@ -15,6 +15,7 @@ import {
 } from "./google";
 import { GMC_SKILL } from "./gmcSkill";
 import { crawlStorefront, type CrawlResult } from "./crawl";
+import { resolveAuditError } from "./auditErrors";
 
 // Thrown when the Anthropic key is missing so the caller can map it to a 500.
 export class MissingAnthropicKey extends Error {
@@ -32,6 +33,10 @@ export class ModelNoToolBlock extends Error {
     this.name = "ModelNoToolBlock";
   }
 }
+
+// Well under the 300s maxDuration of both routes that call runAuditForShop,
+// leaving headroom for the Shopify reads and storefront crawl around it.
+const MODEL_TIMEOUT_MS = 240_000;
 
 export type AuditEngineResult = {
   auditId: string;
@@ -86,6 +91,18 @@ Audit the STORE POLICIES (part 3) in addition:
   empty and that GMC relies on. Policies are always available from the Admin
   API, regardless of whether the storefront is password protected, so audit
   them normally in every case.
+- A policy body is considered absent/unusable (not just "empty") when it is:
+  missing, empty, under 100 characters, random/dummy text (e.g. a placeholder
+  string of letters, "lorem ipsum"), or still contains an unfilled Shopify
+  template placeholder such as "[INSERT RETURN ADDRESS]" or any other
+  "[INSERT ...]" bracket. Treat all of these as needing a full rewrite, see the
+  fixType "partial" rule below - never leave them as "manual_only" when a
+  rewrite can be built from the real data you were given (part 1: shop name,
+  contact email, billing address, currency, active market countries in
+  shopInfo/marketsData; shippingData for delivery zones, countries and rates).
+- A policy that already has real, substantial content but is missing one
+  precise, checkable point (e.g. no refund delay stated, no processing time)
+  is also correctable: see fixType "partial" below for the append-only patch.
 
 Audit the STOREFRONT CONTENT (part 2, theme pages) in addition:
 - Unsupported claims on the storefront (area "claims"): fake or unverifiable
@@ -118,31 +135,65 @@ For every issue that can be corrected, also fill the "patch" object with the
 exact replacement:
 - Choose "fixType": "product_seo" for a product title/description/SEO rewrite,
   "product_compare_at" for a suspicious compare-at price, "policy" for a store
-  policy page, "page" for other storefront pages (about, contact...), "theme"
-  for theme/layout problems, "business_identity" for legal/business identity,
-  and "manual_only" when the merchant must act by hand.
+  policy page, "partial" for a store policy page that needs a data-driven
+  rewrite or a missing paragraph appended (see the two cases below), "page"
+  for other storefront pages (about, contact...), "theme" for theme/layout
+  problems, "business_identity" for legal/business identity, and "manual_only"
+  when the merchant must act by hand.
+- "partial" covers store policy issues and always writes the whole policy body
+  back via shopPolicyUpdate. There are exactly two cases:
+  1. The policy body is absent/empty/dummy/under 100 characters, or contains
+     an unfilled "[INSERT ...]" placeholder (see the STORE POLICIES rule
+     above): "newValue" is the FULL replacement body, built only from real
+     data given to you in part 1 (shop name, contact email, billing address,
+     currency, active market countries, shipping zones/countries/rates,
+     delays if present in shippingData). For any fact needed to write a
+     complete policy that is NOT present in the data (e.g. no return window,
+     no processing delay found anywhere), write an explicit placeholder
+     instead of inventing it, in the exact form
+     "[À COMPLÉTER : délai de remboursement]" (one bracket per missing fact,
+     name the missing fact clearly, always in French with correct accents).
+     Never leave the sentence vague or silently drop it.
+  2. The policy body already has real, substantial content but is missing one
+     precise, checkable point: "newValue" is the FULL existing body with ONLY
+     the missing paragraph appended at the end, unchanged otherwise - never
+     rewrite or reformat the existing text, never fill the gap with an
+     invented fact, use the "[À COMPLÉTER : ...]" placeholder form above if
+     the real data does not contain it either.
+  "currentValue" is the exact current body (or "" if the policy does not
+  exist yet).
+- Keep "manual_only" for store policies only in these cases: the storefront is
+  password protected (existing rule above), the store has zero products, a
+  shipping policy issue where Shopify itself has no delivery zone configured
+  (shippingData empty/missing the relevant zone - nothing to describe), or the
+  business identity/contact info needed is missing everywhere in the data
+  (nothing to build even a placeholder-filled draft from). Do not default a
+  policy issue to "manual_only" for any other reason; if there is at least a
+  shop name or contact email to build a draft from, use "partial".
 - Set "field" to the exact field written, consistent with "fixType":
   "product_seo" -> "seo_description", "seo_title" or "descriptionHtml";
-  "product_compare_at" -> "compareAtPrice"; "policy" -> "policy_body". Leave
-  "field" null for "page", "theme", "business_identity" and "manual_only".
+  "product_compare_at" -> "compareAtPrice"; "policy" and "partial" ->
+  "policy_body". Leave "field" null for "page", "theme", "business_identity"
+  and "manual_only".
 - Set "targetId" to the EXACT Shopify GID copied character for character from
   the "PRODUCT & VARIANT ID INDEX" section, never invented:
   * "product_seo" and "descriptionHtml" -> the product id (gid://shopify/Product/..).
   * "product_compare_at" -> the id of the SPECIFIC variant concerned
     (gid://shopify/ProductVariant/..), not the product id.
-  * "policy" -> the policy type such as "REFUND_POLICY".
+  * "policy" and "partial" -> the policy type such as "REFUND_POLICY".
 - Set "targetHandle" to the product handle copied verbatim from the ID INDEX for
   product_* fixes (fallback for the server), null otherwise.
 - "currentValue" is the exact wrong value. "newValue" MUST contain the exact
   final text to write (e.g. the fully rewritten description, the exact new
-  compare-at price), NEVER an instruction like "reformuler" or "corriger".
-- Set "autoApplicable": true ONLY for "product_seo", "product_compare_at" and
-  "policy", where "newValue" is a safe literal value ready to be written back.
-  For "theme", "business_identity", "page" and "manual_only" set
+  compare-at price, the full policy body per the "partial" rules above), NEVER
+  an instruction like "reformuler" or "corriger".
+- Set "autoApplicable": true ONLY for "product_seo", "product_compare_at",
+  "policy" and "partial", where "newValue" is a safe literal value ready to be
+  written back. For "theme", "business_identity", "page" and "manual_only" set
   "autoApplicable": false; there "newValue" may be a written instruction.
 - Apply the zero-invention rule to "newValue": never introduce a price, delay,
   review, guarantee or any fact that is not already proven in the data you were
-  given.
+  given - use the "[À COMPLÉTER : ...]" placeholder instead, see above.
 - If you cannot identify the id with certainty, set the whole "patch" to null.
   Never emit a half-filled patch; a patch with a missing or guessed targetId is
   worse than no patch at all.
@@ -170,7 +221,8 @@ const AUDIT_TOOL: Anthropic.Tool = {
       },
       summary: {
         type: "string",
-        description: "2-3 sentence plain summary of readiness, written in French.",
+        description:
+          "2-3 sentence plain summary of readiness, written in French. Francais correct avec tous les accents (é, è, ê, à, ç). Jamais de texte sans accents.",
       },
       issues: {
         type: "array",
@@ -207,11 +259,12 @@ const AUDIT_TOOL: Anthropic.Tool = {
             problem: {
               type: "string",
               description:
-                "What is wrong and why it risks a GMC review, written in French.",
+                "What is wrong and why it risks a GMC review, written in French. Francais correct avec tous les accents (é, è, ê, à, ç). Jamais de texte sans accents.",
             },
             fix: {
               type: "string",
-              description: "Concrete, verifiable correction, written in French.",
+              description:
+                "Concrete, verifiable correction, written in French. Francais correct avec tous les accents (é, è, ê, à, ç). Jamais de texte sans accents.",
             },
             patch: {
               type: ["object", "null"],
@@ -224,13 +277,14 @@ const AUDIT_TOOL: Anthropic.Tool = {
                     "product_seo",
                     "product_compare_at",
                     "policy",
+                    "partial",
                     "page",
                     "theme",
                     "business_identity",
                     "manual_only",
                   ],
                   description:
-                    "Kind of correction. product_seo/product_compare_at target Shopify product data, policy targets a store policy page, page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
+                    "Kind of correction. product_seo/product_compare_at target Shopify product data. policy/partial target a store policy page: use 'partial' when the body must be fully rewritten from real shop/shipping data (absent, empty, dummy or containing an unfilled [INSERT ...] placeholder) or when only a missing paragraph must be appended to an existing real body. page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
                 },
                 field: {
                   type: ["string", "null"],
@@ -243,12 +297,12 @@ const AUDIT_TOOL: Anthropic.Tool = {
                     null,
                   ],
                   description:
-                    "Exact field to write, consistent with fixType. product_seo -> 'seo_description', 'seo_title' or 'descriptionHtml'; product_compare_at -> 'compareAtPrice'; policy -> 'policy_body'. Leave null for non auto-applicable fixTypes.",
+                    "Exact field to write, consistent with fixType. product_seo -> 'seo_description', 'seo_title' or 'descriptionHtml'; product_compare_at -> 'compareAtPrice'; policy and partial -> 'policy_body'. Leave null for non auto-applicable fixTypes.",
                 },
                 targetId: {
                   type: ["string", "null"],
                   description:
-                    "The EXACT Shopify GID copied character for character from the ID INDEX, never invented. For product_seo/descriptionHtml it is the product id (gid://shopify/Product/...). For product_compare_at it is the id of the specific VARIANTE concerned (gid://shopify/ProductVariant/...). For policy it is the policy type such as 'REFUND_POLICY'. If you cannot identify the id with certainty, set the whole patch to null.",
+                    "The EXACT Shopify GID copied character for character from the ID INDEX, never invented. For product_seo/descriptionHtml it is the product id (gid://shopify/Product/...). For product_compare_at it is the id of the specific VARIANTE concerned (gid://shopify/ProductVariant/...). For policy and partial it is the policy type such as 'REFUND_POLICY'. If you cannot identify the id with certainty, set the whole patch to null.",
                 },
                 targetHandle: {
                   type: ["string", "null"],
@@ -258,17 +312,17 @@ const AUDIT_TOOL: Anthropic.Tool = {
                 currentValue: {
                   type: "string",
                   description:
-                    "The exact current value that is wrong (title, description, compare-at price, policy text excerpt, etc.).",
+                    "The exact current value that is wrong (title, description, compare-at price, policy body or '' if the policy does not exist yet, etc.).",
                 },
                 newValue: {
                   type: "string",
                   description:
-                    "The exact proposed replacement for product_seo/product_compare_at/policy. For theme/business_identity/page/manual_only it may be a written instruction instead of a literal value. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data.",
+                    "The exact proposed replacement for product_seo/product_compare_at/policy/partial. For 'partial' it is always the FULL policy body to write (either a complete rewrite built only from real data, with '[À COMPLÉTER : ...]' placeholders for facts missing everywhere, or the existing body plus one appended missing paragraph - never an instruction). For theme/business_identity/page/manual_only it may be a written instruction instead of a literal value. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data. When it is French merchant-facing text (policy/partial, or a written instruction), use correct French with all accents (é, è, ê, à, ç) - never text without accents.",
                 },
                 autoApplicable: {
                   type: "boolean",
                   description:
-                    "true ONLY for product_seo, product_compare_at and policy, where newValue is a safe literal replacement. Always false for page, theme, business_identity and manual_only.",
+                    "true ONLY for product_seo, product_compare_at, policy and partial, where newValue is a safe literal replacement. Always false for page, theme, business_identity and manual_only.",
                 },
               },
               required: [
@@ -292,6 +346,31 @@ const AUDIT_TOOL: Anthropic.Tool = {
     required: ["overall", "summary", "issues", "checked"],
   },
 };
+
+// Concatenates every field the model is expected to write in French, so it
+// can be checked for accents as a whole rather than field by field (a single
+// short unaccented word, e.g. a brand name, must not trigger a retry).
+function collectFrenchText(audit: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (typeof audit.summary === "string") parts.push(audit.summary);
+  const issues = Array.isArray(audit.issues) ? audit.issues : [];
+  for (const issue of issues) {
+    if (!issue || typeof issue !== "object") continue;
+    const i = issue as Record<string, unknown>;
+    if (typeof i.problem === "string") parts.push(i.problem);
+    if (typeof i.fix === "string") parts.push(i.fix);
+    const patch = i.patch;
+    if (patch && typeof patch === "object") {
+      const newValue = (patch as Record<string, unknown>).newValue;
+      if (typeof newValue === "string") parts.push(newValue);
+    }
+  }
+  return parts.join(" ");
+}
+
+function hasAccentedChar(s: string): boolean {
+  return /[À-ÖØ-öø-ÿ]/.test(s);
+}
 
 // A Shopify Admin GraphQL call that must never throw: any network error or
 // GraphQL error is caught, logged into `warnings`, and replaced with `fallback`.
@@ -477,11 +556,20 @@ export async function runAuditForShop(opts: {
         myshopifyDomain?: string;
         currencyCode?: string;
         contactEmail?: string;
+        billingAddress?: {
+          address1?: string | null;
+          address2?: string | null;
+          city?: string | null;
+          zip?: string | null;
+          province?: string | null;
+          country?: string | null;
+        };
       };
     } | null>(
       shop,
       token,
-      `{ shop { name myshopifyDomain currencyCode contactEmail } }`,
+      `{ shop { name myshopifyDomain currencyCode contactEmail
+        billingAddress { address1 address2 city zip province country } } }`,
       undefined,
       null,
       "shop",
@@ -580,11 +668,18 @@ export async function runAuditForShop(opts: {
     );
 
     const marketsData = await safeShopifyGraphQL<{
-      markets?: { nodes?: { name?: string; enabled?: boolean }[] };
+      markets?: {
+        nodes?: {
+          name?: string;
+          enabled?: boolean;
+          regions?: { nodes?: { name?: string }[] };
+        }[];
+      };
     } | null>(
       shop,
       token,
-      `{ markets(first: 20) { nodes { name enabled } } }`,
+      `{ markets(first: 20) { nodes { name enabled
+        regions(first: 20) { nodes { ... on MarketRegionCountry { name } } } } } }`,
       undefined,
       null,
       "markets",
@@ -692,16 +787,7 @@ export async function runAuditForShop(opts: {
     const anthropic = new Anthropic({ apiKey });
     const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
 
-    const msg = await anthropic.messages.create({
-      model,
-      max_tokens: 8000,
-      system: SYSTEM,
-      tools: [AUDIT_TOOL],
-      tool_choice: { type: "tool", name: "report_audit" },
-      messages: [
-        {
-          role: "user",
-          content:
+    const snapshotMessage =
             "Here is the Shopify store snapshot to audit.\n\n" +
             "1) SHOP (JSON):\n" +
             JSON.stringify(shopInfo?.shop ?? null) +
@@ -737,10 +823,23 @@ export async function runAuditForShop(opts: {
             "\n\nSTATUT MERCHANT CENTER REEL:\n" +
             gmcSection +
             "\n\nWrite the summary, problem, and fix fields in French, with " +
-            "correct accents. Call report_audit with your findings.",
-        },
-      ],
-    });
+            "correct accents. Call report_audit with your findings.";
+
+    const msg = await anthropic.messages.create(
+      {
+        model,
+        max_tokens: 8000,
+        system: SYSTEM,
+        tools: [AUDIT_TOOL],
+        tool_choice: { type: "tool", name: "report_audit" },
+        messages: [{ role: "user", content: snapshotMessage }],
+      },
+      // Bounded well under the route's maxDuration (300s) so a stuck call
+      // surfaces as a catchable APIConnectionTimeoutError (classified as
+      // "timeout", row marked failed, quota refunded) instead of the whole
+      // function being killed by the platform with the row stuck 'running'.
+      { timeout: MODEL_TIMEOUT_MS },
+    );
 
     const toolBlock = msg.content.find(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
@@ -748,17 +847,69 @@ export async function runAuditForShop(opts: {
 
     if (!toolBlock) {
       // The paid call happened but returned nothing usable: mark the reserved
-      // row failed so it still counts, then surface a typed error.
+      // row failed (excluded from the monthly quota) so it still counts, then
+      // surface a typed error. Raw stop_reason kept for debugging only.
       await markAuditFailed(
         auditId,
-        "L'analyse a echoue, votre credit n'a pas ete consomme",
+        `no tool_use block, stop_reason=${msg.stop_reason ?? "null"}`,
+        "unknown",
       ).catch(() => {});
       throw new ModelNoToolBlock(msg.stop_reason ?? null);
     }
 
-    const audit = toolBlock.input as Record<string, unknown>;
+    let finalStopReason = msg.stop_reason;
+    let audit = toolBlock.input as Record<string, unknown>;
+
+    // The model sometimes strips French accents despite the instruction. If the
+    // combined French text is long enough to judge and has zero accented
+    // character, retry once with an explicit correction request before
+    // accepting the result - cheaper than shipping unaccented French to a
+    // merchant and it self-corrects on the same tool call.
+    const frenchText = collectFrenchText(audit);
+    if (frenchText.length > 200 && !hasAccentedChar(frenchText)) {
+      const retryMsg = await anthropic.messages.create(
+        {
+          model,
+          max_tokens: 8000,
+          system: SYSTEM,
+          tools: [AUDIT_TOOL],
+          tool_choice: { type: "tool", name: "report_audit" },
+          messages: [
+            { role: "user", content: snapshotMessage },
+            { role: "assistant", content: msg.content },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: toolBlock.id,
+                  content:
+                    'Erreur: ce rapport ne contient aucun caractere accentue, ' +
+                    "alors que le francais correct en utilise (e.g. \"protegee\" " +
+                    'doit s\'ecrire "protégée", "donnees" doit s\'ecrire ' +
+                    '"données"). Rappelle report_audit avec exactement le meme ' +
+                    "contenu mais en francais correct, avec tous les accents " +
+                    "necessaires (é, è, ê, à, ù, ç, î, ô...) sur summary, " +
+                    "chaque issue (problem, fix) et chaque patch.newValue en " +
+                    "francais.",
+                },
+              ],
+            },
+          ],
+        },
+        { timeout: MODEL_TIMEOUT_MS },
+      );
+      const retryToolBlock = retryMsg.content.find(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+      );
+      if (retryToolBlock) {
+        finalStopReason = retryMsg.stop_reason;
+        audit = retryToolBlock.input as Record<string, unknown>;
+      }
+    }
+
     const overall = (audit.overall as string) ?? "unknown";
-    const truncated = msg.stop_reason === "max_tokens";
+    const truncated = finalStopReason === "max_tokens";
 
     // Real per-field values read straight from the Admin API above (not
     // Claude's transcription of them), keyed the same way /api/fix builds its
@@ -782,6 +933,11 @@ export async function runAuditForShop(opts: {
         if (v?.id) {
           fieldSnapshots[`${v.id}|compareAtPrice`] = v.compareAtPrice ?? "";
         }
+      }
+    }
+    for (const p of policiesData?.shop?.shopPolicies ?? []) {
+      if (p?.type) {
+        fieldSnapshots[`${p.type}|policy_body`] = p.body ?? "";
       }
     }
 
@@ -808,12 +964,11 @@ export async function runAuditForShop(opts: {
   } catch (err) {
     if (err instanceof ModelNoToolBlock) throw err;
     // The call was engaged but errored (Shopify or Claude side): keep the
-    // reserved row as 'failed' so the attempt is accounted for, with a message
-    // the merchant can read, and note the quota was not actually spent.
-    await markAuditFailed(
-      auditId,
-      "L'analyse a echoue, votre credit n'a pas ete consomme",
-    ).catch(() => {});
+    // reserved row as 'failed' so the attempt is accounted for (excluded from
+    // the monthly quota, see countAuditsForUserSince), with a raw detail kept
+    // for debugging and a fixed, safe French message for the merchant.
+    const { code, raw } = resolveAuditError("runAuditForShop", err);
+    await markAuditFailed(auditId, raw, code).catch(() => {});
     throw err;
   }
 }

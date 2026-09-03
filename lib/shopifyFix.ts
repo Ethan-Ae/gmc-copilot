@@ -9,6 +9,7 @@ export const APPLICABLE_FIX_TYPES = new Set([
   "product_seo",
   "product_compare_at",
   "policy",
+  "partial",
 ]);
 
 export type Patch = {
@@ -81,7 +82,7 @@ export async function resolveTarget(
   if (fixType === "product_compare_at") {
     return resolveCompareAt(shop, token, patch);
   }
-  if (fixType === "policy") {
+  if (fixType === "policy" || fixType === "partial") {
     return resolvePolicy(shop, token, patch);
   }
   return { error: "fix_type_not_applicable", status: 403 };
@@ -321,11 +322,15 @@ async function resolveCompareAt(
   };
 }
 
-// policy: ShopPolicyInput only needs { type, body }, no existing id required,
-// so shopPolicyUpdate also creates a policy of that type when it does not yet
-// exist. targetId holds the type (e.g. REFUND_POLICY). A type absent from
-// shop.shopPolicies is treated as an empty, writable policy - never an error -
-// so the merchant can fill it in from scratch.
+// policy / partial: shared resolver, both write the full body via
+// shopPolicyUpdate ("partial" is used for absent/dummy/placeholder policies
+// rewritten from real shop data, or an existing body with one paragraph
+// appended - see auditEngine's system prompt). ShopPolicyInput only needs
+// { type, body }, no existing id required, so shopPolicyUpdate also creates a
+// policy of that type when it does not yet exist. targetId holds the type
+// (e.g. REFUND_POLICY). A type absent from shop.shopPolicies is treated as an
+// empty, writable policy - never an error - so the merchant can fill it in
+// from scratch.
 async function resolvePolicy(
   shop: string,
   token: string,
@@ -356,7 +361,26 @@ async function resolvePolicy(
         }`,
         { shopPolicy: { type, body: newValue } },
       );
-      return res.shopPolicyUpdate?.userErrors ?? [];
+      const userErrors = res.shopPolicyUpdate?.userErrors ?? [];
+      if (userErrors.length) return userErrors;
+
+      // Re-read the policy so it is only reported "Applied" once the Admin API
+      // confirms the body actually matches what we just wrote.
+      const check = await shopifyGraphQL<{
+        shop: { shopPolicies: { type: string; body: string }[] };
+      }>(shop, token, `{ shop { shopPolicies { type body } } }`, {});
+      const written = (check.shop?.shopPolicies ?? []).find(
+        (p) => p.type === type,
+      );
+      if (norm(written?.body) !== norm(newValue)) {
+        return [
+          {
+            message:
+              "L'ecriture n'a pas ete confirmee par Shopify, le contenu de la politique ne correspond pas. Reessayez.",
+          },
+        ];
+      }
+      return [];
     },
   };
 }

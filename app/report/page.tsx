@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 // --- Audit contract types (see app/api/audits/route.ts) ---
@@ -154,10 +154,15 @@ function Masthead({ shop }: { shop?: string }) {
 
 function ReportInner() {
   const params = useSearchParams();
+  const router = useRouter();
   const shop = params.get("shop")?.trim().toLowerCase() ?? "";
-  const [state, setState] = useState<State>(
-    shop ? { status: "idle" } : { status: "error", message: "Aucune boutique indiquee dans l'URL." },
-  );
+  const [state, setState] = useState<State>({ status: "idle" });
+
+  useEffect(() => {
+    // No shop in the URL is a navigation mistake, not an audit failure - send
+    // the merchant back to the dashboard instead of showing an error screen.
+    if (!shop) router.replace("/dashboard");
+  }, [shop, router]);
   // Bumped on every retry so a poll loop from a previous attempt stops itself
   // instead of racing the new one.
   const runId = useRef(0);
@@ -181,7 +186,7 @@ function ReportInner() {
       if (!res.ok || !body?.auditId) {
         const message =
           (body && (body.detail || body.error)) ||
-          `L'audit a echoue (code ${res.status}).`;
+          `L'audit a échoué (code ${res.status}).`;
         if (runId.current === myRun) setState({ status: "error", message });
         return;
       }
@@ -191,7 +196,7 @@ function ReportInner() {
         setState({
           status: "error",
           message:
-            "Impossible de joindre le serveur d'audit. Verifie ta connexion et reessaie.",
+            "Impossible de joindre le serveur d'audit. Vérifiez votre connexion et réessayez.",
         });
       }
       return;
@@ -215,7 +220,7 @@ function ReportInner() {
         if (!res.ok) {
           const message =
             (body && (body.detail || body.error)) ||
-            `L'audit a echoue (code ${res.status}).`;
+            `L'audit a échoué (code ${res.status}).`;
           setState({ status: "error", message });
           return;
         }
@@ -228,7 +233,7 @@ function ReportInner() {
         if (body.status === "failed") {
           setState({
             status: "error",
-            message: body.error || "L'analyse a echoue.",
+            message: body.error || "L'analyse a échoué.",
           });
           return;
         }
@@ -241,7 +246,7 @@ function ReportInner() {
         setState({
           status: "error",
           message:
-            "Impossible de joindre le serveur d'audit. Verifie ta connexion et reessaie.",
+            "Impossible de joindre le serveur d'audit. Vérifiez votre connexion et réessayez.",
         });
       }
     };
@@ -352,15 +357,15 @@ function ErrorView({
         {message}
       </p>
       <p className="mt-4 text-muted leading-relaxed">
-        Verifie le domaine de la boutique, puis relance. Si le probleme
-        persiste, reessaie dans une minute - l&apos;analyse peut prendre plus
-        de temps si la boutique est lente a repondre.
+        Vérifiez le domaine de la boutique, puis relancez. Si le problème
+        persiste, réessayez dans une minute - l&apos;analyse peut prendre plus
+        de temps si la boutique est lente à répondre.
       </p>
       <button
         onClick={onRetry}
         className="mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
       >
-        Reessayer
+        Réessayer
       </button>
     </section>
   );

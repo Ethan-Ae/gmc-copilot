@@ -10,6 +10,7 @@ import {
   markAuditRunning,
 } from "../../../../../lib/audits";
 import { runAuditForShop } from "../../../../../lib/auditEngine";
+import { auditErrorMessage } from "../../../../../lib/auditErrors";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -44,7 +45,9 @@ export async function POST(
   }
 
   if (!row.shop || !row.user_id) {
-    await markAuditFailed(id, "Donnees d'audit incompletes.").catch(() => {});
+    await markAuditFailed(id, "Donnees d'audit incompletes.", "unknown").catch(
+      () => {},
+    );
     return jsonResponse({ error: "invalid_audit_row" }, { status: 500 });
   }
 
@@ -54,12 +57,13 @@ export async function POST(
   try {
     token = await getShopifyAccessToken(row.shop);
   } catch (err) {
-    const message =
-      err instanceof ShopifyReauthRequired
-        ? "La connexion Shopify a expire. Reconnectez la boutique."
-        : "Impossible d'obtenir un jeton d'acces Shopify.";
-    await markAuditFailed(id, message).catch(() => {});
-    return jsonResponse({ status: "failed", error: message }, { status: 200 });
+    const code = err instanceof ShopifyReauthRequired ? "shopify_auth" : "unknown";
+    const raw = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    await markAuditFailed(id, raw, code).catch(() => {});
+    return jsonResponse(
+      { status: "failed", error: auditErrorMessage(code) },
+      { status: 200 },
+    );
   }
 
   try {
