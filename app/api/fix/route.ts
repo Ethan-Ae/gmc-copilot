@@ -16,10 +16,30 @@ import {
   resolveTarget,
   type Mode,
   type Patch,
+  type UserError,
 } from "../../../lib/shopifyFix";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
+
+const MAX_MULTI_TARGETS = 50;
+
+// The second half of the field_snapshots key (see lib/auditEngine.ts's
+// fieldSnapshots) does not always equal the wire "field" the model sends: for
+// policy/partial the wire field is one of the policy type constants (matching
+// targetId, per the tool schema's field enum), but auditEngine always
+// snapshots policies under the fixed suffix "policy_body". Translating here
+// keeps the two in sync without coupling the tool schema to the internal
+// snapshot key format.
+function snapshotFieldFor(fixType: string, field: string | null | undefined): string | null {
+  if (fixType === "policy" || fixType === "partial") return "policy_body";
+  return field ?? null;
+}
+
+// A Shopify Admin GID, e.g. gid://shopify/Product/123.
+function isGid(s: unknown): s is string {
+  return typeof s === "string" && /^gid:\/\/shopify\/\w+\/\d+/.test(s);
+}
 
 export async function POST(req: NextRequest) {
   // (a) Clerk user.
@@ -86,6 +106,17 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "shopify_token_error" }, { status: 502 });
   }
 
+  // Multi-product fix: the same literal phrase is removed/replaced across
+  // several products in one call instead of one patch per product.
+  if (
+    fixType === "product_seo" &&
+    patch.field === "descriptionHtml" &&
+    Array.isArray(patch.targetIds) &&
+    patch.targetIds.length > 0
+  ) {
+    return handleMultiTarget({ userId, shop, token, patch, mode, auditId: body.auditId });
+  }
+
   const newValue = patch.newValue ?? "";
 
   // The audit-time baseline for drift detection. Prefer the real value read
@@ -93,17 +124,23 @@ export async function POST(req: NextRequest) {
   // field_snapshots), since patch.currentValue is Claude's transcription of
   // that value and is not guaranteed byte-exact for long HTML - relying on it
   // alone caused spurious "modified since the audit" drift on a first-ever
-  // apply. Falls back to patch.currentValue for older audits or fields not
-  // snapshotted (e.g. policy_body).
+  // apply. When no snapshot exists at all for this exact key (older audit
+  // whose row predates field_snapshots, or a field genuinely never captured),
+  // there is nothing trustworthy to compare against - skip the drift check
+  // entirely and apply, rather than falsely refuse against Claude's
+  // transcription of "currentValue".
   let capturedValue = patch.currentValue ?? "";
   let snapshotKey: string | null = null;
-  if (body.auditId && patch.targetId && patch.field) {
+  let hasSnapshot = false;
+  const snapshotField = snapshotFieldFor(fixType, patch.field);
+  if (body.auditId && patch.targetId && snapshotField) {
     const auditRow = await getAuditById(body.auditId, userId).catch(() => null);
-    const key = `${patch.targetId}|${patch.field}`;
+    const key = `${patch.targetId}|${snapshotField}`;
     const snapshots = auditRow?.field_snapshots;
     if (snapshots && Object.prototype.hasOwnProperty.call(snapshots, key)) {
       snapshotKey = key;
       capturedValue = snapshots[key];
+      hasSnapshot = true;
     }
   }
 
@@ -111,11 +148,16 @@ export async function POST(req: NextRequest) {
     // Resolve the target and read its live value.
     const target = await resolveTarget(shop, token, fixType, patch);
     if ("error" in target) {
+      console.warn(
+        `[fix:${target.error}] shop=${shop} fixType=${fixType} field=${JSON.stringify(patch.field ?? null)} targetId=${patch.targetId ?? "null"}`,
+      );
       return jsonResponse({ error: target.error }, { status: target.status });
     }
 
     const { currentLive } = target;
-    const drift = norm(currentLive) !== norm(capturedValue);
+    const stripTags = patch.field === "descriptionHtml";
+    const drift =
+      hasSnapshot && norm(currentLive, { stripTags }) !== norm(capturedValue, { stripTags });
 
     // preview: report the live value and whether it drifted, never write.
     if (mode === "preview") {
@@ -130,6 +172,11 @@ export async function POST(req: NextRequest) {
     // apply + drift: the merchant changed this field since the audit. Do not
     // overwrite a manual correction.
     if (drift) {
+      console.warn(
+        `[fix:drift] shop=${shop} fixType=${fixType} field=${JSON.stringify(patch.field ?? null)} ` +
+          `targetId=${patch.targetId ?? "null"} snapshotKey=${snapshotKey} ` +
+          `captured=${JSON.stringify(capturedValue).slice(0, 500)} live=${JSON.stringify(currentLive).slice(0, 500)}`,
+      );
       return jsonResponse({
         status: "drift",
         currentLive,
@@ -175,4 +222,129 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return jsonResponse({ status: "error", detail: String(err) }, { status: 502 });
   }
+}
+
+// Applies (or previews) the same find/replace transformation to every product
+// in patch.targetIds, each resolved and drift-checked independently via the
+// normal single-product machinery, so an issue like "this exact promo phrase
+// appears in ~40 product descriptions" is one user action instead of 40.
+async function handleMultiTarget(opts: {
+  userId: string;
+  shop: string;
+  token: string;
+  patch: Patch;
+  mode: Mode;
+  auditId?: string;
+}) {
+  const { userId, shop, token, patch, mode, auditId } = opts;
+  const targetIds = (patch.targetIds ?? []).filter(isGid).slice(0, MAX_MULTI_TARGETS);
+  const findText = patch.findText ?? "";
+  const replaceText = patch.replaceText ?? "";
+
+  if (targetIds.length === 0) {
+    return jsonResponse({ error: "missing_target_id" }, { status: 400 });
+  }
+  if (!findText) {
+    return jsonResponse({ error: "missing_find_text" }, { status: 400 });
+  }
+
+  const auditRow = auditId ? await getAuditById(auditId, userId).catch(() => null) : null;
+  const snapshots = auditRow?.field_snapshots ?? null;
+
+  type PreviewRow = {
+    targetId: string;
+    found: boolean;
+    currentLive: string | null;
+    newValue: string | null;
+    drift: boolean;
+  };
+  type SkippedRow = { targetId: string; reason: string };
+
+  const previewRows: PreviewRow[] = [];
+  const skipped: SkippedRow[] = [];
+  let appliedCount = 0;
+
+  for (const targetId of targetIds) {
+    const targetPatch: Patch = { fixType: "product_seo", field: "descriptionHtml", targetId };
+    let target;
+    try {
+      target = await resolveTarget(shop, token, "product_seo", targetPatch);
+    } catch (err) {
+      skipped.push({ targetId, reason: String(err) });
+      continue;
+    }
+    if ("error" in target) {
+      console.warn(`[fix:multi:${target.error}] shop=${shop} targetId=${targetId}`);
+      skipped.push({ targetId, reason: target.error });
+      continue;
+    }
+
+    const { currentLive } = target;
+    const found = typeof currentLive === "string" && currentLive.includes(findText);
+    const computedValue = found
+      ? (currentLive as string).split(findText).join(replaceText).replace(/[ \t]{2,}/g, " ").trim()
+      : currentLive;
+
+    const key = `${targetId}|descriptionHtml`;
+    const hasSnapshot = Boolean(snapshots && Object.prototype.hasOwnProperty.call(snapshots, key));
+    const capturedValue = hasSnapshot ? snapshots![key] : "";
+    const drift =
+      hasSnapshot && norm(currentLive, { stripTags: true }) !== norm(capturedValue, { stripTags: true });
+
+    if (mode === "preview") {
+      previewRows.push({ targetId, found, currentLive, newValue: computedValue, drift });
+      continue;
+    }
+
+    if (!found) {
+      skipped.push({ targetId, reason: "Phrase deja absente de ce produit." });
+      continue;
+    }
+    if (drift) {
+      console.warn(
+        `[fix:multi:drift] shop=${shop} targetId=${targetId} snapshotKey=${key} ` +
+          `captured=${JSON.stringify(capturedValue).slice(0, 500)} live=${JSON.stringify(currentLive).slice(0, 500)}`,
+      );
+      skipped.push({ targetId, reason: "Modifie depuis l'audit - relancez un audit." });
+      continue;
+    }
+
+    const userErrors: UserError[] = await target.write(computedValue ?? "");
+    if (userErrors.length) {
+      skipped.push({ targetId, reason: userErrors.map((e) => e.message).join(" ") });
+      continue;
+    }
+
+    if (auditId) {
+      await updateFieldSnapshot(auditId, key, computedValue ?? "").catch(() => {});
+    }
+    await recordFix({
+      userId,
+      shop,
+      auditId: auditId ?? null,
+      fixType: "product_seo",
+      field: "descriptionHtml",
+      targetId,
+      previousValue: currentLive,
+      newValue: computedValue,
+    });
+    appliedCount += 1;
+  }
+
+  if (mode === "preview") {
+    return jsonResponse({
+      status: "preview",
+      multi: true,
+      targetCount: targetIds.length,
+      results: previewRows,
+    });
+  }
+
+  return jsonResponse({
+    status: "applied",
+    multi: true,
+    appliedCount,
+    skippedCount: skipped.length,
+    skipped,
+  });
 }

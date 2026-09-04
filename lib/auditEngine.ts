@@ -170,19 +170,35 @@ exact replacement:
   (nothing to build even a placeholder-filled draft from). Do not default a
   policy issue to "manual_only" for any other reason; if there is at least a
   shop name or contact email to build a draft from, use "partial".
-- Set "field" to the exact field written, consistent with "fixType":
-  "product_seo" -> "seo_description", "seo_title" or "descriptionHtml";
-  "product_compare_at" -> "compareAtPrice"; "policy" and "partial" ->
-  "policy_body". Leave "field" null for "page", "theme", "business_identity"
-  and "manual_only".
+- Set "field" to the exact field written, consistent with "fixType" (this is
+  a closed enum on the tool, any other value is refused by the server):
+  "product_seo" -> "title", "descriptionHtml", "seo.title", "seo.description",
+  "productType", "vendor" or "tags"; "product_compare_at" -> "compareAtPrice";
+  "policy" and "partial" -> the same policy type constant as "targetId" (e.g.
+  "REFUND_POLICY"). Leave "field" null for "page", "theme",
+  "business_identity" and "manual_only".
 - Set "targetId" to the EXACT Shopify GID copied character for character from
   the "PRODUCT & VARIANT ID INDEX" section, never invented:
-  * "product_seo" and "descriptionHtml" -> the product id (gid://shopify/Product/..).
+  * "product_seo" -> the product id (gid://shopify/Product/..).
   * "product_compare_at" -> the id of the SPECIFIC variant concerned
     (gid://shopify/ProductVariant/..), not the product id.
   * "policy" and "partial" -> the policy type such as "REFUND_POLICY".
 - Set "targetHandle" to the product handle copied verbatim from the ID INDEX for
   product_* fixes (fallback for the server), null otherwise.
+- MULTIPLE PRODUCTS, SAME FIX: when the exact same literal phrase must be
+  removed/replaced across several products' descriptionHtml (e.g. one
+  scarcity sentence copy-pasted into many listings), do NOT emit one issue per
+  product. Emit exactly ONE issue with "fixType": "product_seo", "field":
+  "descriptionHtml", and fill "targetIds" with every affected product id (up
+  to 50, exact GIDs from the ID INDEX, never invented). Set "findText" to the
+  EXACT substring to remove, copied verbatim as it appears in those products'
+  descriptionHtml, and "replaceText" to its replacement ("" to just remove
+  it). Leave "targetId" as one representative product id and "currentValue"/
+  "newValue" as that one product's before/after, for display only - the
+  server applies findText/replaceText to each product's own current value,
+  never a shared literal. Only use this when the phrase is genuinely
+  identical across products; if the correction must differ per product, use
+  one normal issue per product instead.
 - "currentValue" is the exact wrong value. "newValue" MUST contain the exact
   final text to write (e.g. the fully rewritten description, the exact new
   compare-at price, the full policy body per the "partial" rules above), NEVER
@@ -289,35 +305,61 @@ const AUDIT_TOOL: Anthropic.Tool = {
                 field: {
                   type: ["string", "null"],
                   enum: [
-                    "seo_description",
-                    "seo_title",
+                    "title",
                     "descriptionHtml",
+                    "seo.title",
+                    "seo.description",
+                    "productType",
+                    "vendor",
+                    "tags",
                     "compareAtPrice",
-                    "policy_body",
+                    "SHIPPING_POLICY",
+                    "REFUND_POLICY",
+                    "PRIVACY_POLICY",
+                    "TERMS_OF_SERVICE",
+                    "LEGAL_NOTICE",
+                    "SUBSCRIPTION_POLICY",
                     null,
                   ],
                   description:
-                    "Exact field to write, consistent with fixType. product_seo -> 'seo_description', 'seo_title' or 'descriptionHtml'; product_compare_at -> 'compareAtPrice'; policy and partial -> 'policy_body'. Leave null for non auto-applicable fixTypes.",
+                    "Exact field to write, consistent with fixType. product_seo -> 'title', 'descriptionHtml', 'seo.title', 'seo.description', 'productType', 'vendor' or 'tags'; product_compare_at -> 'compareAtPrice'; policy and partial -> the same policy type constant as targetId. Leave null for non auto-applicable fixTypes.",
                 },
                 targetId: {
                   type: ["string", "null"],
                   description:
-                    "The EXACT Shopify GID copied character for character from the ID INDEX, never invented. For product_seo/descriptionHtml it is the product id (gid://shopify/Product/...). For product_compare_at it is the id of the specific VARIANTE concerned (gid://shopify/ProductVariant/...). For policy and partial it is the policy type such as 'REFUND_POLICY'. If you cannot identify the id with certainty, set the whole patch to null.",
+                    "The EXACT Shopify GID copied character for character from the ID INDEX, never invented. For product_seo it is the product id (gid://shopify/Product/...). For product_compare_at it is the id of the specific VARIANTE concerned (gid://shopify/ProductVariant/...). For policy and partial it is the policy type such as 'REFUND_POLICY'. If you cannot identify the id with certainty, set the whole patch to null. For a multi-product fix (see targetIds below) this holds one representative product id for display only.",
                 },
                 targetHandle: {
                   type: ["string", "null"],
                   description:
                     "Optional product handle copied verbatim from the ID INDEX. Provide it for product_* fixes as a fallback when the server needs to re-resolve the id. Null otherwise.",
                 },
+                targetIds: {
+                  type: ["array", "null"],
+                  items: { type: "string" },
+                  maxItems: 50,
+                  description:
+                    "Only for fixType 'product_seo' + field 'descriptionHtml', when the exact same literal phrase must be removed/replaced across several products instead of one issue per product: every affected product id (up to 50, exact GIDs from the ID INDEX, never invented). Requires findText to be set. Null otherwise.",
+                },
+                findText: {
+                  type: ["string", "null"],
+                  description:
+                    "Only used with targetIds: the EXACT substring to find in each of those products' current descriptionHtml, copied verbatim (case-sensitive). Null otherwise.",
+                },
+                replaceText: {
+                  type: ["string", "null"],
+                  description:
+                    "Only used with targetIds: the replacement for findText in each product ('' to remove it). Null otherwise.",
+                },
                 currentValue: {
                   type: "string",
                   description:
-                    "The exact current value that is wrong (title, description, compare-at price, policy body or '' if the policy does not exist yet, etc.).",
+                    "The exact current value that is wrong (title, description, compare-at price, policy body or '' if the policy does not exist yet, etc.). For a multi-product fix (targetIds), one representative product's current value, for display only.",
                 },
                 newValue: {
                   type: "string",
                   description:
-                    "The exact proposed replacement for product_seo/product_compare_at/policy/partial. For 'partial' it is always the FULL policy body to write (either a complete rewrite built only from real data, with '[À COMPLÉTER : ...]' placeholders for facts missing everywhere, or the existing body plus one appended missing paragraph - never an instruction). For theme/business_identity/page/manual_only it may be a written instruction instead of a literal value. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data. When it is French merchant-facing text (policy/partial, or a written instruction), use correct French with all accents (é, è, ê, à, ç) - never text without accents.",
+                    "The exact proposed replacement for product_seo/product_compare_at/policy/partial. For 'partial' it is always the FULL policy body to write (either a complete rewrite built only from real data, with '[À COMPLÉTER : ...]' placeholders for facts missing everywhere, or the existing body plus one appended missing paragraph - never an instruction). For theme/business_identity/page/manual_only it may be a written instruction instead of a literal value. For a multi-product fix (targetIds), one representative product's proposed value, for display only - the server computes the real per-product value from findText/replaceText. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data. When it is French merchant-facing text (policy/partial, or a written instruction), use correct French with all accents (é, è, ê, à, ç) - never text without accents.",
                 },
                 autoApplicable: {
                   type: "boolean",
@@ -421,6 +463,9 @@ type ProductNode = {
   title?: string;
   descriptionHtml?: string;
   seo?: { title?: string | null; description?: string | null };
+  productType?: string;
+  vendor?: string;
+  tags?: string[];
   variants?: { edges?: { node?: VariantNode }[] };
 };
 type ProductEdge = { node?: ProductNode };
@@ -449,6 +494,7 @@ async function fetchActiveProducts(
           seo { title description }
           productType
           vendor
+          tags
           totalInventory
           featuredImage { url altText }
           variants(first: 5) {
@@ -922,11 +968,23 @@ export async function runAuditForShop(opts: {
       if (typeof p.descriptionHtml === "string") {
         fieldSnapshots[`${p.id}|descriptionHtml`] = p.descriptionHtml;
       }
+      if (typeof p.title === "string") {
+        fieldSnapshots[`${p.id}|title`] = p.title;
+      }
       if (p.seo?.title != null) {
-        fieldSnapshots[`${p.id}|seo_title`] = p.seo.title ?? "";
+        fieldSnapshots[`${p.id}|seo.title`] = p.seo.title ?? "";
       }
       if (p.seo?.description != null) {
-        fieldSnapshots[`${p.id}|seo_description`] = p.seo.description ?? "";
+        fieldSnapshots[`${p.id}|seo.description`] = p.seo.description ?? "";
+      }
+      if (typeof p.productType === "string") {
+        fieldSnapshots[`${p.id}|productType`] = p.productType;
+      }
+      if (typeof p.vendor === "string") {
+        fieldSnapshots[`${p.id}|vendor`] = p.vendor;
+      }
+      if (Array.isArray(p.tags)) {
+        fieldSnapshots[`${p.id}|tags`] = p.tags.join(", ");
       }
       for (const vEdge of p.variants?.edges ?? []) {
         const v = vEdge?.node;

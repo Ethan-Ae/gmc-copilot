@@ -27,6 +27,11 @@ interface FixPatch {
   field?: string | null;
   targetId?: string | null;
   targetHandle?: string | null;
+  // Multi-product fix: same literal phrase removed/replaced across several
+  // products (fixType product_seo, field descriptionHtml only).
+  targetIds?: string[] | null;
+  findText?: string | null;
+  replaceText?: string | null;
   currentValue?: string;
   newValue?: string;
   autoApplicable?: boolean;
@@ -510,8 +515,9 @@ function ResultView({
 
 // "Tout corriger": applies every auto-applicable patch in sequence, one write
 // at a time, and shows a recap. Runs independently of each IssueCard's own
-// Previsualiser/Appliquer buttons, which remain available per-issue.
-type BatchOutcome = "applied" | "skipped" | "error";
+// Previsualiser/Appliquer buttons, which remain available per-issue. A
+// multi-product patch (targetIds) counts each product individually in the
+// recap, not the single issue it came from.
 function FixAllActions({
   shop,
   auditId,
@@ -534,8 +540,6 @@ function FixAllActions({
     const skipped: { patch: FixPatch; reason: string }[] = [];
 
     for (const patch of patches) {
-      let outcome: BatchOutcome = "error";
-      let reason = "Une erreur est survenue.";
       try {
         const res = await fetch("/api/fix", {
           method: "POST",
@@ -543,13 +547,26 @@ function FixAllActions({
           body: JSON.stringify({ shop, patch, mode: "apply", auditId }),
         });
         const body = await res.json().catch(() => null);
+
+        // Multi-product fix: the response counts individual products, not
+        // one outcome for the whole issue.
+        if (res.ok && body?.status === "applied" && body?.multi) {
+          applied += body.appliedCount ?? 0;
+          for (const s of (body.skipped ?? []) as { reason: string }[]) {
+            skipped.push({ patch, reason: s.reason });
+          }
+          continue;
+        }
+
         if (res.ok && body?.status === "applied") {
-          outcome = "applied";
-        } else if (body?.status === "drift") {
-          outcome = "skipped";
+          applied += 1;
+          continue;
+        }
+
+        let reason: string;
+        if (body?.status === "drift") {
           reason = "Modifie depuis l'audit - relancez un audit.";
         } else {
-          outcome = "skipped";
           reason =
             (body?.userErrors?.length &&
               body.userErrors.map((e: { message: string }) => e.message).join(" ")) ||
@@ -557,13 +574,10 @@ function FixAllActions({
             body?.error ||
             "Une erreur est survenue.";
         }
+        skipped.push({ patch, reason });
       } catch {
-        outcome = "skipped";
-        reason = "Le serveur est injoignable.";
+        skipped.push({ patch, reason: "Le serveur est injoignable." });
       }
-
-      if (outcome === "applied") applied += 1;
-      else skipped.push({ patch, reason });
     }
 
     setRecap({ applied, skipped });
@@ -719,12 +733,21 @@ type AppliedResult = { kind: "applied"; fixId: string; newValue: string };
 type DriftResult = { kind: "drift"; currentLive: string | null };
 type ErrorResult = { kind: "error"; message: string };
 type RevertedResult = { kind: "reverted" };
+type MultiPreviewResult = { kind: "multi-preview"; targetCount: number; foundCount: number };
+type MultiAppliedResult = {
+  kind: "multi-applied";
+  appliedCount: number;
+  skippedCount: number;
+  skipped: { targetId: string; reason: string }[];
+};
 type FixResult =
   | PreviewResult
   | AppliedResult
   | DriftResult
   | ErrorResult
-  | RevertedResult;
+  | RevertedResult
+  | MultiPreviewResult
+  | MultiAppliedResult;
 
 function FixActions({
   shop,
@@ -760,6 +783,15 @@ function FixActions({
         setResult({ kind: "error", message: userErrorsText(body) });
         return;
       }
+      if (body?.multi) {
+        const results = (body.results ?? []) as { found: boolean }[];
+        setResult({
+          kind: "multi-preview",
+          targetCount: body.targetCount ?? results.length,
+          foundCount: results.filter((r) => r.found).length,
+        });
+        return;
+      }
       setResult({
         kind: "preview",
         currentLive: body.currentLive ?? null,
@@ -782,6 +814,15 @@ function FixActions({
         body: JSON.stringify({ shop, patch, mode: "apply", auditId }),
       });
       const body = await res.json().catch(() => null);
+      if (res.ok && body?.status === "applied" && body?.multi) {
+        setResult({
+          kind: "multi-applied",
+          appliedCount: body.appliedCount ?? 0,
+          skippedCount: body.skippedCount ?? 0,
+          skipped: body.skipped ?? [],
+        });
+        return;
+      }
       if (res.ok && body?.status === "applied") {
         setResult({
           kind: "applied",
@@ -828,11 +869,12 @@ function FixActions({
   };
 
   const applied = result?.kind === "applied" ? result : null;
+  const finished = result?.kind === "reverted" || result?.kind === "multi-applied";
 
   return (
     <div className="mt-4 border-t border-line pt-4">
       <div className="flex flex-wrap items-center gap-2">
-        {!applied && result?.kind !== "reverted" && (
+        {!applied && !finished && (
           <>
             <button
               onClick={preview}
@@ -895,6 +937,29 @@ function FixActions({
 
       {result?.kind === "error" && (
         <p className="mt-3 text-sm text-nogo">{result.message}</p>
+      )}
+
+      {result?.kind === "multi-preview" && (
+        <p className="mt-3 text-sm text-muted">
+          Concerne {result.targetCount} produit{result.targetCount > 1 ? "s" : ""}, dont{" "}
+          {result.foundCount} avec la phrase encore presente.
+        </p>
+      )}
+
+      {result?.kind === "multi-applied" && (
+        <p className="mt-3 text-sm text-go font-medium">
+          {result.appliedCount} produit{result.appliedCount > 1 ? "s" : ""} corrige
+          {result.appliedCount > 1 ? "s" : ""}
+          {result.skippedCount > 0 && (
+            <span className="block text-warn font-normal mt-1">
+              {result.skippedCount} ignore{result.skippedCount > 1 ? "s" : ""} :{" "}
+              {result.skipped
+                .map((s) => s.reason)
+                .filter((r, i, arr) => arr.indexOf(r) === i)
+                .join(", ")}
+            </span>
+          )}
+        </p>
       )}
     </div>
   );

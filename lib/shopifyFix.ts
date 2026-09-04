@@ -17,6 +17,14 @@ export type Patch = {
   field?: string | null;
   targetId?: string | null;
   targetHandle?: string | null;
+  // Multi-product fix: the SAME literal phrase is removed/replaced across
+  // several products in one issue instead of one patch per product. Only
+  // supported for fixType "product_seo" + field "descriptionHtml". When set,
+  // targetId/newValue are ignored server-side; targetId/currentValue/newValue
+  // on the patch are kept only as a representative example for display.
+  targetIds?: string[] | null;
+  findText?: string | null;
+  replaceText?: string | null;
   currentValue?: string;
   newValue?: string;
   autoApplicable?: boolean;
@@ -41,9 +49,57 @@ export type Target = {
 
 export type ResolveError = { error: string; status: number };
 
-// Normalise text so a cosmetic whitespace difference is not read as a drift.
-export function norm(s: unknown): string {
-  return typeof s === "string" ? s.replace(/\s+/g, " ").trim() : "";
+// The second half of a field_snapshots key (see lib/auditEngine.ts's
+// fieldSnapshots) does not always equal the wire "field" the model sends: for
+// policy/partial the wire field is one of the policy type constants (matching
+// targetId, per the tool schema's field enum), but auditEngine always
+// snapshots policies under the fixed suffix "policy_body". Exported so both
+// the /api/fix route and scripts/smoke-fix.ts translate the same way.
+export function snapshotFieldFor(
+  fixType: string,
+  field: string | null | undefined,
+): string | null {
+  if (fixType === "policy" || fixType === "partial") return "policy_body";
+  return field ?? null;
+}
+
+const HTML_ENTITY_MAP: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+function decodeHtmlEntities(s: string): string {
+  return s.replace(/&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, ent: string) => {
+    if (ent[0] === "#") {
+      const code =
+        ent[1] === "x" || ent[1] === "X"
+          ? parseInt(ent.slice(2), 16)
+          : parseInt(ent.slice(1), 10);
+      return Number.isNaN(code) ? match : String.fromCodePoint(code);
+    }
+    return HTML_ENTITY_MAP[ent] ?? match;
+  });
+}
+
+function stripHtmlTags(s: string): string {
+  return s.replace(/<[^>]*>/g, " ");
+}
+
+// Normalise text so a cosmetic difference is never read as a drift: trims,
+// collapses whitespace, unifies line endings, and decodes HTML entities (a
+// live re-read can come back "&amp;" where the snapshot had "&", etc). Pass
+// stripTags for descriptionHtml, since Shopify may re-serialise the exact
+// same visible content with different markup between two reads.
+export function norm(s: unknown, opts?: { stripTags?: boolean }): string {
+  if (typeof s !== "string") return "";
+  let out = opts?.stripTags ? stripHtmlTags(s) : s;
+  out = decodeHtmlEntities(out);
+  out = out.replace(/\r\n?/g, "\n").replace(/\s+/g, " ").trim();
+  return out;
 }
 
 export async function shopifyGraphQL<T = unknown>(
@@ -89,12 +145,41 @@ export async function resolveTarget(
 }
 
 // product_seo: the exact field to write is given by patch.field. targetId is the
-// product gid.
+// product gid. Aliases kept for audits generated before the field enum below
+// was tightened - resolved here rather than rejected, so an already-open
+// report page never hard-fails with invalid_field after a prompt/schema
+// change.
+const FIELD_ALIASES: Record<string, string> = {
+  seo_title: "seo.title",
+  seo_description: "seo.description",
+};
+const PRODUCT_FIELDS = new Set([
+  "title",
+  "descriptionHtml",
+  "seo.title",
+  "seo.description",
+  "productType",
+  "vendor",
+  "tags",
+]);
+
+function normalizeProductField(raw: string | null | undefined): string | null {
+  const field = (raw ?? "").trim();
+  const resolved = FIELD_ALIASES[field] ?? field;
+  return PRODUCT_FIELDS.has(resolved) ? resolved : null;
+}
+
 type SeoProduct = {
   id: string;
+  title: string;
   descriptionHtml: string;
+  productType: string | null;
+  vendor: string | null;
+  tags: string[];
   seo: { title: string | null; description: string | null };
 };
+
+const SEO_PRODUCT_FIELDS = `id title descriptionHtml productType vendor tags seo { title description }`;
 
 // Resolve the product either by its GID or, as a fallback, by its handle.
 async function fetchSeoProduct(
@@ -106,9 +191,7 @@ async function fetchSeoProduct(
     const data = await shopifyGraphQL<{ product: SeoProduct | null }>(
       shop,
       token,
-      `query($id: ID!) {
-        product(id: $id) { id descriptionHtml seo { title description } }
-      }`,
+      `query($id: ID!) { product(id: $id) { ${SEO_PRODUCT_FIELDS} } }`,
       { id: patch.targetId },
     );
     return data.product;
@@ -121,7 +204,7 @@ async function fetchSeoProduct(
       token,
       `query($q: String!) {
         products(first: 1, query: $q) {
-          edges { node { id descriptionHtml seo { title description } } }
+          edges { node { ${SEO_PRODUCT_FIELDS} } }
         }
       }`,
       { q: `handle:${patch.targetHandle}` },
@@ -136,15 +219,7 @@ async function resolveProductSeo(
   token: string,
   patch: Patch,
 ): Promise<Target | ResolveError> {
-  const field = patch.field ?? "";
-  const seoField =
-    field === "seo_description"
-      ? "seo.description"
-      : field === "seo_title"
-        ? "seo.title"
-        : field === "descriptionHtml"
-          ? "descriptionHtml"
-          : null;
+  const seoField = normalizeProductField(patch.field);
   if (!seoField) return { error: "invalid_field", status: 400 };
 
   const resolved = await fetchSeoProduct(shop, token, patch);
@@ -157,7 +232,15 @@ async function resolveProductSeo(
       ? product.descriptionHtml
       : seoField === "seo.title"
         ? (product.seo?.title ?? null)
-        : (product.seo?.description ?? null);
+        : seoField === "seo.description"
+          ? (product.seo?.description ?? null)
+          : seoField === "title"
+            ? product.title
+            : seoField === "productType"
+              ? product.productType
+              : seoField === "vendor"
+                ? product.vendor
+                : (product.tags ?? []).join(", ");
 
   return {
     currentLive,
@@ -167,7 +250,20 @@ async function resolveProductSeo(
           ? { descriptionHtml: newValue }
           : seoField === "seo.title"
             ? { seo: { title: newValue } }
-            : { seo: { description: newValue } };
+            : seoField === "seo.description"
+              ? { seo: { description: newValue } }
+              : seoField === "title"
+                ? { title: newValue }
+                : seoField === "productType"
+                  ? { productType: newValue }
+                  : seoField === "vendor"
+                    ? { vendor: newValue }
+                    : {
+                        tags: newValue
+                          .split(",")
+                          .map((t) => t.trim())
+                          .filter(Boolean),
+                      };
       const res = await shopifyGraphQL<{
         productUpdate: { userErrors: UserError[] };
       }>(
@@ -328,9 +424,13 @@ async function resolveCompareAt(
 // appended - see auditEngine's system prompt). ShopPolicyInput only needs
 // { type, body }, no existing id required, so shopPolicyUpdate also creates a
 // policy of that type when it does not yet exist. targetId holds the type
-// (e.g. REFUND_POLICY). A type absent from shop.shopPolicies is treated as an
-// empty, writable policy - never an error - so the merchant can fill it in
-// from scratch.
+// (e.g. REFUND_POLICY). patch.field for policy/partial is one of the policy
+// type constants too (same value as targetId, per the tool schema's field
+// enum) - it is not consulted here, only targetId is; the caller
+// (app/api/fix/route.ts) maps it to the internal "policy_body" snapshot
+// suffix for drift detection. A type absent from shop.shopPolicies is treated
+// as an empty, writable policy - never an error - so the merchant can fill it
+// in from scratch.
 async function resolvePolicy(
   shop: string,
   token: string,
