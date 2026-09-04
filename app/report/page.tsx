@@ -66,6 +66,10 @@ interface AuditResponse {
   model: string;
   truncated: boolean;
   gmcConnected: boolean;
+  // True when the shipping/markets Shopify read was refused for lacking
+  // scope (see lib/auditEngine.ts's needsReauth). Optional so an older
+  // cached response without the field just does not show the banner.
+  needsReauth?: boolean;
   audit: Audit;
   entitlements?: Entitlements;
 }
@@ -391,6 +395,28 @@ function GmcBanner() {
   );
 }
 
+// Shown once at the top of the report when the shipping/markets read was
+// refused for lacking scope: this app manages its own OAuth (legacy install
+// flow), so Shopify never auto-upgrades an already-installed shop's granted
+// scopes - the merchant has to go through /api/shopify/auth again. The audit
+// above still ran and is still usable; this only affects shipping-policy
+// cross-checks against real zones/markets.
+function ReauthBanner({ shop }: { shop: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-ink-soft px-4 py-3 text-sm text-muted">
+      Cette boutique a ete connectee avant l&apos;ajout des autorisations
+      livraison et marches - certains controles (zones, pays, devises) n&apos;ont
+      pas pu etre verifies.{" "}
+      <a
+        href={`/api/shopify/auth?shop=${encodeURIComponent(shop)}`}
+        className="text-brand underline"
+      >
+        Reconnecter Shopify
+      </a>
+    </div>
+  );
+}
+
 function ResultView({
   data,
   onRetry,
@@ -414,6 +440,7 @@ function ResultView({
   return (
     <div className="rise space-y-8">
       {!data.gmcConnected && <GmcBanner />}
+      {data.needsReauth && <ReauthBanner shop={data.shop} />}
 
       {/* Verdict panel */}
       <section

@@ -85,7 +85,8 @@ async function main(): Promise<void> {
     `[smoke] audit done in ${seconds}s - overall=${result.overall} ` +
       `products=${result.productsAudited}${
         result.productsTotal != null ? `/${result.productsTotal}` : ""
-      } truncated=${result.truncated} gmcConnected=${result.gmcConnected}`,
+      } truncated=${result.truncated} gmcConnected=${result.gmcConnected} ` +
+      `needsReauth=${result.needsReauth}`,
   );
 
   if (result.warnings.length) {

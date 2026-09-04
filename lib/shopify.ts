@@ -10,7 +10,15 @@ type ShopifyEnv = {
 export function getEnv(): ShopifyEnv {
   const apiKey = process.env.SHOPIFY_API_KEY;
   const apiSecret = process.env.SHOPIFY_API_SECRET;
-  const scopes = process.env.SHOPIFY_SCOPES ?? "read_products";
+  // Kept in sync with shopify.app.toml's [access_scopes].scopes - this is the
+  // scope string sent to /admin/oauth/authorize (app/api/shopify/auth). A
+  // shop installed before read_markets/read_shipping were added keeps its
+  // narrower granted scope until it goes through OAuth again (this app uses
+  // use_legacy_install_flow, so Shopify does not auto-upgrade it) - see
+  // lib/auditEngine.ts's needsReauth for how that is detected and surfaced.
+  const scopes =
+    process.env.SHOPIFY_SCOPES ??
+    "write_legal_policies,read_products,write_products,read_markets,read_shipping";
   const appUrl = process.env.SHOPIFY_APP_URL;
 
   if (!apiKey || !apiSecret || !appUrl) {

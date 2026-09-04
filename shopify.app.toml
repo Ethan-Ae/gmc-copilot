@@ -10,7 +10,16 @@ api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_legal_policies,read_products,write_products"
+# read_markets: active market countries/currencies, used by the audit engine
+# (lib/auditEngine.ts) to check policy consistency and draft shipping policy
+# rewrites. read_shipping: delivery profiles (zones, countries, rates) via the
+# deliveryProfiles query, same purpose. use_legacy_install_flow = true means
+# Shopify does NOT auto-prompt already-installed merchants for these new
+# scopes on next load (that only happens under the managed installation flow,
+# which this app opts out of) - lib/auditEngine.ts detects the resulting
+# ACCESS_DENIED on deliveryProfiles/markets and surfaces a reconnect prompt
+# instead (see AuditEngineResult.needsReauth).
+scopes = "write_legal_policies,read_products,write_products,read_markets,read_shipping"
 optional_scopes = [ ]
 use_legacy_install_flow = true
 

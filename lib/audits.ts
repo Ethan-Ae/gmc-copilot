@@ -53,6 +53,11 @@ async function ensureSchema(): Promise<void> {
   // second fix on the same field within the same audit compares against the
   // value we just wrote, not the stale audit-time one.
   await sql`alter table audits add column if not exists field_snapshots jsonb`;
+  // True when the deliveryProfiles or markets Admin API read was refused for
+  // lacking scope (ACCESS_DENIED) at audit time - see lib/auditEngine.ts's
+  // needsReauth. Drives the "reconnect Shopify" prompt on the report page for
+  // a shop installed before read_shipping/read_markets existed.
+  await sql`alter table audits add column if not exists needs_reauth boolean not null default false`;
   ready = true;
 }
 
@@ -76,6 +81,7 @@ export type AuditRow = {
   truncated: boolean;
   gmc_connected: boolean;
   field_snapshots: Record<string, string> | null;
+  needs_reauth: boolean;
 };
 
 // Reserve a quota row as 'queued' right after the request is accepted, before
@@ -138,6 +144,7 @@ export async function markAuditDone(
     truncated?: boolean;
     gmcConnected?: boolean;
     fieldSnapshots?: Record<string, string>;
+    needsReauth?: boolean;
   },
 ): Promise<void> {
   await ensureSchema();
@@ -152,7 +159,8 @@ export async function markAuditDone(
         model = ${extra?.model ?? null},
         truncated = ${extra?.truncated ?? false},
         gmc_connected = ${extra?.gmcConnected ?? false},
-        field_snapshots = ${extra?.fieldSnapshots ? JSON.stringify(extra.fieldSnapshots) : null}
+        field_snapshots = ${extra?.fieldSnapshots ? JSON.stringify(extra.fieldSnapshots) : null},
+        needs_reauth = ${extra?.needsReauth ?? false}
     where id = ${id}
   `;
 }
@@ -197,7 +205,7 @@ export async function getAuditsForUser(userId: string): Promise<AuditRow[]> {
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
            status, progress_step, error_message, error_code, model, truncated, gmc_connected,
-           field_snapshots
+           field_snapshots, needs_reauth
     from audits
     where user_id = ${userId} and status = 'done'
     order by created_at desc
@@ -241,7 +249,7 @@ export async function getLatestDoneAuditForShop(
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
            status, progress_step, error_message, error_code, model, truncated, gmc_connected,
-           field_snapshots
+           field_snapshots, needs_reauth
     from audits
     where shop = ${shop}
       and status = 'done'
@@ -261,7 +269,7 @@ export async function getAuditById(
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
            status, progress_step, error_message, error_code, model, truncated, gmc_connected,
-           field_snapshots
+           field_snapshots, needs_reauth
     from audits
     where id = ${id} and user_id = ${userId}
   `) as AuditRow[];
@@ -277,7 +285,7 @@ export async function getAuditByIdInternal(id: string): Promise<AuditRow | null>
   const rows = (await sql`
     select id, user_id, shop, created_at, overall, result,
            status, progress_step, error_message, error_code, model, truncated, gmc_connected,
-           field_snapshots
+           field_snapshots, needs_reauth
     from audits
     where id = ${id}
   `) as AuditRow[];

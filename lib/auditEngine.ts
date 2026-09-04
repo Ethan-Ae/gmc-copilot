@@ -45,6 +45,14 @@ export type AuditEngineResult = {
   model: string;
   truncated: boolean;
   gmcConnected: boolean;
+  // True when the deliveryProfiles or markets read was refused for lacking
+  // scope (ACCESS_DENIED) - this app uses use_legacy_install_flow, so a shop
+  // installed before read_shipping/read_markets existed keeps its narrower
+  // granted scope until it manually goes through /api/shopify/auth again;
+  // Shopify does not auto-upgrade it. The audit still completes in that case
+  // (shipping/market checks are just skipped), and the client shows a
+  // reconnect prompt.
+  needsReauth: boolean;
   productsAudited: number;
   productsTotal: number | null;
   warnings: string[];
@@ -85,12 +93,18 @@ hype rather than a verifiable fact.
 Audit the STORE POLICIES (part 3) in addition:
 - Policy completeness and consistency, using the real Admin API body of each
   policy. Shipping (area "shipping"): delivery time, cost, target countries,
-  processing/cutoff. Returns/refunds (area "returns"): return window, fees,
-  damaged goods, refund processing time. Contact details and legal notice /
-  business identity (area "policy"). Flag a required policy whose body is
-  empty and that GMC relies on. Policies are always available from the Admin
-  API, regardless of whether the storefront is password protected, so audit
-  them normally in every case.
+  processing/cutoff - cross-check every claim against the real SHIPPING ZONES
+  / RATES (1d, from deliveryProfiles: zones, countries and rates) and MARKETS
+  (1e: active market countries and currencies) data. Flag a mismatch as an
+  issue (e.g. a country named in the policy that is not an active market or
+  zone, a stated rate that does not match any real rate). When 1d/1e are both
+  empty, do not guess - treat shipping zone/rate claims as unverifiable
+  ("needs-verification") rather than confirming or denying them. Returns/
+  refunds (area "returns"): return window, fees, damaged goods, refund
+  processing time. Contact details and legal notice / business identity (area
+  "policy"). Flag a required policy whose body is empty and that GMC relies
+  on. Policies are always available from the Admin API, regardless of whether
+  the storefront is password protected, so audit them normally in every case.
 - A policy body is considered absent/unusable (not just "empty") when it is:
   missing, empty, under 100 characters, random/dummy text (e.g. a placeholder
   string of letters, "lorem ipsum"), or still contains an unfilled Shopify
@@ -732,6 +746,17 @@ export async function runAuditForShop(opts: {
       warnings,
     );
 
+    // safeShopifyGraphQL never throws on a GraphQL-level error, it records it
+    // as a warning and degrades to `fallback` (see above) - a missing scope
+    // must never break the audit. Detecting it here, scoped to exactly these
+    // two calls, is how a legacy-install-flow shop (see needsReauth on
+    // AuditEngineResult) gets flagged for reconnection without failing.
+    const needsReauth = warnings.some(
+      (w) =>
+        (w.startsWith("shippingZones:") || w.startsWith("markets:")) &&
+        w.includes("ACCESS_DENIED"),
+    );
+
     // Product handles from the Admin API feed the storefront product crawl.
     const handles = productEdges
       .map((e) => e?.node?.handle)
@@ -1004,6 +1029,7 @@ export async function runAuditForShop(opts: {
       truncated,
       gmcConnected,
       fieldSnapshots,
+      needsReauth,
     }).catch(() => {
       // persistence must never break returning the audit to the caller
     });
@@ -1015,6 +1041,7 @@ export async function runAuditForShop(opts: {
       model,
       truncated,
       gmcConnected,
+      needsReauth,
       productsAudited: productEdges.length,
       productsTotal,
       warnings,

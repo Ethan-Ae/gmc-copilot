@@ -63,6 +63,7 @@ export async function GET(
     model: row.model,
     truncated: row.truncated,
     gmcConnected: row.gmc_connected,
+    needsReauth: row.needs_reauth,
     audit: row.result,
     entitlements: entitlements
       ? {
