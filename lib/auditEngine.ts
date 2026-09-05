@@ -105,20 +105,37 @@ Audit the STORE POLICIES (part 3) in addition:
   "policy"). Flag a required policy whose body is empty and that GMC relies
   on. Policies are always available from the Admin API, regardless of whether
   the storefront is password protected, so audit them normally in every case.
-- A policy body is considered absent/unusable (not just "empty") when it is:
-  missing, empty, under 100 characters, random/dummy text (e.g. a placeholder
-  string of letters, "lorem ipsum"), or still contains an unfilled placeholder
-  - a raw Shopify template one such as "[INSERT RETURN ADDRESS]"/"[INSERT ...]",
-  or one of your own earlier "[À COMPLÉTER : ...]" markers left unfilled.
-  Treat all of these as needing a rewrite: use fixType "partial" ONLY when
-  every fact needed is present in the data you were given (part 1) so the
-  rewrite has zero placeholders; use fixType "manual_only" when at least one
-  fact is missing everywhere in the data, see the rule below - a policy
-  currently containing an unfilled placeholder is itself always reported as
-  "manual_only", never "partial".
+  Check EVERY policy type present in shopPolicies individually (shipping,
+  refund, privacy, terms of service, legal notice, subscription if present) -
+  do not fold an absent LEGAL_NOTICE into a generic business-identity remark
+  instead of reporting it. When LEGAL_NOTICE itself is absent/empty, report it
+  and patch it exactly like any other absent policy (see the creation rule
+  below: fixType "partial", full body from real data, "[À COMPLÉTER : ...]"
+  for whatever business-identity fact - legal name, address - is missing). A
+  billing address missing street/city/postal code is its own separate issue
+  (area "identity", fixType "business_identity", never auto-applicable) in
+  addition to, never instead of, the LEGAL_NOTICE policy creation.
+- A policy body is considered absent/unusable when it is missing, empty, under
+  100 characters, or random/dummy text (e.g. a placeholder string of letters,
+  "lorem ipsum"). This is a CREATION: use fixType "partial" and write the FULL
+  new body from the real data you were given (part 1). A fact this policy
+  needs that is not in the data gets its own "[À COMPLÉTER : ...]" marker
+  instead of being invented - placeholders ARE allowed here, this stays
+  "partial" with "autoApplicable": true, since the merchant fills the bracket
+  in later from the Shopify Admin fields the fix screen shows.
+- A policy body that ALREADY EXISTS (real, substantial current content) and
+  still contains an unfilled placeholder left over from before - a raw
+  Shopify template one such as "[INSERT RETURN ADDRESS]"/"[INSERT ...]", or
+  one of your own earlier "[À COMPLÉTER : ...]" markers - is a different case:
+  that leftover placeholder is itself the issue to report, always fixType
+  "manual_only" (never "partial", never write another placeholder back). List
+  the exact missing fields and the Shopify Admin path in "fix".
 - A policy that already has real, substantial content but is missing one
   precise, checkable point (e.g. no refund delay stated, no processing time)
-  is also correctable: see fixType "partial" below for the append-only patch.
+  is also correctable: use fixType "partial" for the append-only patch ONLY
+  when that missing fact IS present in the data; if it is missing everywhere,
+  use "manual_only" instead rather than appending a placeholder to an
+  otherwise-real policy - see fixType "partial" below for both cases.
 
 Audit the STOREFRONT CONTENT (part 2, theme pages) in addition:
 - Unsupported claims on the storefront (area "claims"): fake or unverifiable
@@ -157,43 +174,64 @@ exact replacement:
   problems, "business_identity" for legal/business identity, and "manual_only"
   when the merchant must act by hand.
 - "partial" covers store policy issues and always writes the whole policy body
-  back via shopPolicyUpdate, and ONLY when the result needs NO placeholder at
-  all - every fact used is proven by the data you were given (part 1: shop
-  name, contact email, billing address, currency, active market countries,
-  shipping zones/countries/rates, delays if present in shippingData). There
-  are exactly two such cases:
-  1. The policy body is absent/empty/dummy/under 100 characters: "newValue" is
-     the FULL replacement body, built only from that real data.
-  2. The policy body already has real, substantial content but is missing one
-     precise, checkable point that IS present in the data: "newValue" is the
-     FULL existing body with ONLY the missing paragraph appended at the end,
-     unchanged otherwise - never rewrite or reformat the existing text.
+  back via shopPolicyUpdate. There are exactly two such cases:
+  1. CREATION - the policy body is absent/empty/dummy/under 100 characters:
+     "newValue" is the FULL replacement body, built from that real data (shop
+     name, contact email, billing address, currency, active market countries,
+     shipping zones/countries/rates, delays if present in shippingData)
+     wherever it is available. A fact this store's data does not have gets a
+     "[À COMPLÉTER : ...]" marker instead of being invented - placeholders are
+     expected and fine here, this still stays "partial" with "autoApplicable":
+     true, since the merchant fills the bracket in later.
+  2. APPEND - the policy body already has real, substantial content but is
+     missing one precise, checkable point that IS present in the data:
+     "newValue" is the FULL existing body with ONLY the missing paragraph
+     appended at the end, unchanged otherwise - never rewrite or reformat the
+     existing text, and NEVER append a placeholder here (if that fact is
+     missing everywhere in the data, use "manual_only" instead, see below).
   "currentValue" is the exact current body (or "" if the policy does not
   exist yet).
-- PLACEHOLDERS ARE ALWAYS "manual_only", NEVER "partial": if, for either case
-  above, at least one fact needed is missing everywhere in the data (e.g. no
-  return window, no processing delay found anywhere), do NOT use "partial" and
-  do NOT write a "[À COMPLÉTER : ...]" bracket into an autoApplicable
-  "newValue" - a live Shopify policy must never be overwritten with visible
-  placeholder text. Use fixType "manual_only" and "autoApplicable": false
-  instead. Write "fix" as the exact list of fields still to fill in, named
-  clearly in French with correct accents (e.g. "delai de remboursement",
-  "adresse de retour"), followed by the exact path "Shopify Admin > Parametres
-  > Politiques > [nom de la politique]" where the merchant enters them by
-  hand. This also applies whenever the CURRENT policy body (part 3) already
-  contains an unfilled placeholder left over from before (a raw Shopify
-  "[INSERT ...]" or one of your own earlier "[À COMPLÉTER : ...]" markers):
-  that is itself the issue to report, always "manual_only" with the same
-  field list and path, never "partial" - never propose writing the same or
-  another placeholder back.
+- PLACEHOLDERS IN THE APPEND CASE ARE ALWAYS "manual_only", NEVER "partial":
+  in case 2 above, if the fact needed is missing everywhere in the data (e.g.
+  no return window, no processing delay found anywhere), do NOT use "partial"
+  and do NOT append a "[À COMPLÉTER : ...]" bracket into an autoApplicable
+  "newValue" - an already-good, live Shopify policy must never be overwritten
+  with visible placeholder text. Use fixType "manual_only" and
+  "autoApplicable": false instead. Write "fix" as the exact list of fields
+  still to fill in, named clearly in French with correct accents (e.g. "delai
+  de remboursement", "adresse de retour"), followed by the exact path
+  "Shopify Admin > Parametres > Politiques > [nom de la politique]" where the
+  merchant enters them by hand. This also applies whenever the CURRENT policy
+  body (part 3) already contains an unfilled placeholder left over from
+  before (a raw Shopify "[INSERT ...]" or one of your own earlier "[À
+  COMPLÉTER : ...]" markers): that is itself the issue to report, always
+  "manual_only" with the same field list and path, never "partial" - never
+  propose writing the same or another placeholder back. None of this applies
+  to case 1 (creation of an absent/empty policy): there, a placeholder for a
+  missing fact is fine and the issue stays "partial"/"autoApplicable": true.
 - Keep "manual_only" for store policies also in these cases: the storefront is
-  password protected (existing rule above), the store has zero products, a
-  shipping policy issue where Shopify itself has no delivery zone configured
-  (shippingData empty/missing the relevant zone - nothing to describe), or the
-  business identity/contact info needed is missing everywhere in the data
-  (nothing to build even a description of what is missing). Do not default a
-  policy issue to "manual_only" for any other reason; if every fact needed is
-  present in the data, use "partial".
+  password protected (existing rule above), the store has zero products, or a
+  shipping policy APPEND (case 2, the shipping policy already has real content
+  and is missing one point) where Shopify itself has no delivery zone
+  configured (shippingData empty/missing the relevant zone - nothing to
+  describe). Do NOT default to "manual_only" merely because a fact such as
+  business identity/contact info is missing everywhere in the data for a
+  CREATION (case 1, the policy is absent/empty): use a
+  "[À COMPLÉTER : ...]" placeholder for that fact instead and keep it
+  "partial"/"autoApplicable": true, per the creation rule above. Do not
+  default a policy issue to "manual_only" for any other reason; if every fact
+  needed for an APPEND is present in the data, use "partial".
+- MANDATORY for CREATION (case 1): SHIPPING_POLICY, REFUND_POLICY,
+  TERMS_OF_SERVICE and LEGAL_NOTICE, whenever absent/empty, MUST each get a
+  fixType "partial" issue with "autoApplicable": true and a full draft body in
+  "newValue", even when MOST of the content ends up being "[À COMPLÉTER : ...]"
+  placeholders because little or no real data is available for that policy.
+  A policy with few or no facts available is still a valid "partial" - do not
+  reclassify it "manual_only" just because the draft is placeholder-heavy;
+  that reclassification is reserved strictly for the cases listed above
+  (append with a missing fact, or a pre-existing unresolved placeholder in the
+  CURRENT body). Never merge an absent LEGAL_NOTICE into the separate
+  business-identity address issue instead of creating it.
 - Set "field" to the exact field written, consistent with "fixType" (this is
   a closed enum on the tool, any other value is refused by the server):
   "product_seo" -> "title", "descriptionHtml", "seo.title", "seo.description",
@@ -324,7 +362,7 @@ const AUDIT_TOOL: Anthropic.Tool = {
                     "manual_only",
                   ],
                   description:
-                    "Kind of correction. product_seo/product_compare_at target Shopify product data. policy/partial target a store policy page: use 'partial' ONLY when the body can be fully rewritten (or completed with one appended paragraph) using facts already proven by the data, with zero '[À COMPLÉTER : ...]' placeholder in newValue. If any fact is missing everywhere, or the policy already contains an unfilled placeholder, use 'manual_only' instead and describe the missing fields plus the Shopify Admin path in 'fix'. page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
+                    "Kind of correction. product_seo/product_compare_at target Shopify product data. policy/partial target a store policy page: use 'partial' when the policy is absent/empty (creation - newValue is the full new body, a '[À COMPLÉTER : ...]' placeholder for any fact the data does not have is fine here) or when an existing policy just needs one missing paragraph appended AND that fact is proven by the data (zero placeholder allowed in that append case). If the CURRENT policy body already contains an unfilled placeholder, or an existing policy needs an appended fact that is missing everywhere in the data, use 'manual_only' instead and describe the missing fields plus the Shopify Admin path in 'fix'. page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
                 },
                 field: {
                   type: ["string", "null"],
@@ -383,7 +421,7 @@ const AUDIT_TOOL: Anthropic.Tool = {
                 newValue: {
                   type: "string",
                   description:
-                    "The exact proposed replacement for product_seo/product_compare_at/policy/partial. For 'partial' it is always the FULL policy body to write, with ZERO '[À COMPLÉTER : ...]' placeholder - either a complete rewrite built only from real data, or the existing body plus one appended missing paragraph, never an instruction. If any fact is missing everywhere, use fixType 'manual_only' instead (see above) and put the exact list of missing fields plus the Shopify Admin path in 'fix', not a placeholder in newValue. For theme/business_identity/page/manual_only, newValue may be a written instruction instead of a literal value. For a multi-product fix (targetIds), one representative product's proposed value, for display only - the server computes the real per-product value from findText/replaceText. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data. When it is French merchant-facing text (policy/partial, or a written instruction), use correct French with all accents (é, è, ê, à, ç) - never text without accents.",
+                    "The exact proposed replacement for product_seo/product_compare_at/policy/partial. For 'partial' it is always the FULL policy body to write: for a CREATION (policy currently absent/empty), the full new body built from real data, where a '[À COMPLÉTER : ...]' placeholder is allowed for any fact the data does not have; for an APPEND (existing substantial body missing one point), the existing body plus that ONE appended paragraph with ZERO placeholder - if that fact is missing everywhere, use fixType 'manual_only' instead (see above) and put the exact list of missing fields plus the Shopify Admin path in 'fix', not a placeholder in newValue. For theme/business_identity/page/manual_only, newValue may be a written instruction instead of a literal value. For a multi-product fix (targetIds), one representative product's proposed value, for display only - the server computes the real per-product value from findText/replaceText. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data. When it is French merchant-facing text (policy/partial, or a written instruction), use correct French with all accents (é, è, ê, à, ç) - never text without accents.",
                 },
                 autoApplicable: {
                   type: "boolean",
@@ -555,12 +593,19 @@ const POLICY_LABELS: Record<string, string> = {
 };
 
 // Server-side safety net for the placeholder classification rule in SYSTEM
-// above: even if the model ignores the instruction and still proposes an
-// autoApplicable "policy"/"partial" patch whose newValue contains an
-// unresolved placeholder, never let that placeholder text reach a live
-// Shopify policy write. Force the issue to "manual_only" with the exact list
-// of missing fields and the exact Shopify Admin path instead.
-function enforcePlaceholderGuard(audit: Record<string, unknown>): void {
+// above - but only for a policy that already EXISTS with a body: a missing or
+// empty policy is the normal creation case (fixType "partial", auto-applicable,
+// placeholders in newValue are expected there, filled in later by the
+// merchant from the Shopify Admin fields the fix screen shows). What must
+// never reach a live write is a policy that already has real content on
+// Shopify AND still carries an unresolved placeholder in it - that is a
+// pre-existing manual gap, not something this app generated, so it is forced
+// to "manual_only" with the exact list of missing fields and the exact
+// Shopify Admin path instead of being silently overwritten or auto-applied.
+function enforcePlaceholderGuard(
+  audit: Record<string, unknown>,
+  currentPolicyBodies: Record<string, string>,
+): void {
   const issues = Array.isArray(audit.issues) ? audit.issues : [];
   for (const issue of issues) {
     if (!issue || typeof issue !== "object") continue;
@@ -570,11 +615,17 @@ function enforcePlaceholderGuard(audit: Record<string, unknown>): void {
     const p = patch as Record<string, unknown>;
     if (p.fixType !== "policy" && p.fixType !== "partial") continue;
 
+    const policyType = typeof p.targetId === "string" ? p.targetId : null;
+    const currentBody = (policyType && currentPolicyBodies[policyType]) || "";
+    // Empty/absent policy: this is a creation, not an edit - leave whatever
+    // fixType the model chose (normally "partial", auto-applicable) alone
+    // even if newValue still contains placeholders for facts we don't have.
+    if (findPlaceholders(currentBody).length === 0) continue;
+
     const newValue = typeof p.newValue === "string" ? p.newValue : "";
     const placeholders = findPlaceholders(newValue);
     if (placeholders.length === 0) continue;
 
-    const policyType = typeof p.targetId === "string" ? p.targetId : null;
     const label = (policyType && POLICY_LABELS[policyType]) || "cette politique";
     const fields = placeholders
       .map((ph) =>
@@ -1140,9 +1191,15 @@ export async function runAuditForShop(opts: {
       const retryToolBlock = retryMsg.content.find(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
       );
-      if (retryToolBlock) {
+      // The tool schema is only a hint, not an enforced contract: a retry can
+      // come back with e.g. "issues" as a stringified JSON blob instead of a
+      // real array. Never let a malformed retry replace a structurally valid
+      // first result - keep the original audit and fall through to the local
+      // dictionary fallback below instead.
+      const retryAudit = retryToolBlock?.input as Record<string, unknown> | undefined;
+      if (retryToolBlock && retryAudit && Array.isArray(retryAudit.issues)) {
         finalStopReason = retryMsg.stop_reason;
-        audit = retryToolBlock.input as Record<string, unknown>;
+        audit = retryAudit;
         frenchText = collectFrenchText(audit);
       }
 
@@ -1157,10 +1214,17 @@ export async function runAuditForShop(opts: {
       );
     }
 
-    // Server-side safety net: never let a policy patch with an unresolved
-    // "[À COMPLÉTER : ...]" placeholder reach the merchant as an
-    // auto-applicable fix, regardless of what fixType the model chose.
-    enforcePlaceholderGuard(audit);
+    // Server-side safety net: never let a patch that edits an EXISTING policy
+    // (one that already has a body on Shopify) reach the merchant as
+    // auto-applicable while it still carries an unresolved placeholder. A
+    // missing/empty policy is excluded on purpose - that is a normal creation
+    // and its placeholders are meant to be filled in by the merchant after
+    // the auto-apply, not a reason to block the apply itself.
+    const currentPolicyBodies: Record<string, string> = {};
+    for (const p of policiesData?.shop?.shopPolicies ?? []) {
+      if (p?.type) currentPolicyBodies[p.type] = p.body ?? "";
+    }
+    enforcePlaceholderGuard(audit, currentPolicyBodies);
 
     const overall = (audit.overall as string) ?? "unknown";
     const truncated = finalStopReason === "max_tokens";
