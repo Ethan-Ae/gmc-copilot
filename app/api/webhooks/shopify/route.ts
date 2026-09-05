@@ -1,11 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
-import { logWebhook, redactShop } from "../../../../lib/webhookLogs";
-
-export const runtime = "nodejs";
-
-// Shopify GDPR mandatory webhooks (customers/data_request, customers/redact,
-// shop/redact). A single POST endpoint routes on the X-Shopify-Topic header.
+// Single endpoint for the three mandatory GDPR compliance webhooks
+// (customers/data_request, customers/redact, shop/redact - see
+// shopify.app.toml) plus app/uninstalled.
+//
+// Contract Shopify grades during App Store review:
+// 1. HMAC verification on the RAW body is the only case that returns a
+//    non-200 status (401 on an invalid/missing signature).
+// 2. Once verified, respond 200 immediately; do all processing afterwards
+//    via next/server's after(). Nothing that happens during processing can
+//    change the response that was already sent.
+// 3. Processing is idempotent: a shop already deleted, data already absent,
+//    or a row that was never created is a silent success, never an error.
+//    Every processing path is wrapped in try/catch that only logs.
+// 4. Every webhook received is logged server-side (topic, shop domain,
+//    result) via lib/webhookLogs.ts, regardless of how processing went.
 //
 // -- Manual test ----------------------------------------------------------
 // Invalid HMAC must be rejected with 401:
@@ -25,81 +32,103 @@ export const runtime = "nodejs";
 //     -H "X-Shopify-Hmac-Sha256: $SIG" \
 //     -H "Content-Type: application/json" \
 //     --data-binary "$BODY"
+// See scripts/smoke-webhook.ts for an automated version of both cases.
 // -------------------------------------------------------------------------
+import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
+import { verifyWebhookHmac } from "../../../../lib/webhookHmac";
+import { logWebhook, redactShop } from "../../../../lib/webhookLogs";
+import { applySubscriptionWebhook } from "../../../../lib/billingState";
 
-function verifyWebhookHmac(rawBody: string, header: string | null): boolean {
-  if (!header) return false;
-  const secret = process.env.SHOPIFY_API_SECRET;
-  if (!secret) return false;
+export const runtime = "nodejs";
 
-  const digest = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody, "utf8")
-    .digest("base64");
-
-  const a = Buffer.from(digest, "utf8");
-  const b = Buffer.from(header, "utf8");
-  // timingSafeEqual throws on length mismatch, so bail out first.
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+// Shop domain lives under `shop_domain` in the GDPR payloads. Normalize to the
+// same lowercase form the OAuth callback stores.
+function extractShopDomain(payload: Record<string, unknown> | null): string | null {
+  if (!payload) return null;
+  const raw = payload["shop_domain"];
+  return typeof raw === "string" ? raw.trim().toLowerCase() : null;
 }
 
 export async function POST(req: NextRequest) {
-  // (a) Read the raw body BEFORE anything else. Parsing to JSON first would
+  // Read the raw body BEFORE anything else. Parsing to JSON first would
   // re-serialize the bytes and the HMAC would never match.
   const rawBody = await req.text();
 
-  // (b) Reject anything without a valid signature. Mandatory for the Shopify
-  // app review.
+  // The only path to a non-200 response: an invalid or missing signature.
   const hmacHeader = req.headers.get("x-shopify-hmac-sha256");
   if (!verifyWebhookHmac(rawBody, hmacHeader)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  // (c) Only now is it safe to parse.
-  let payload: Record<string, unknown>;
-  try {
-    payload = JSON.parse(rawBody) as Record<string, unknown>;
-  } catch {
-    return new NextResponse("Bad Request", { status: 400 });
-  }
+  const topic = req.headers.get("x-shopify-topic") ?? "unknown";
 
-  const topic = req.headers.get("x-shopify-topic") ?? "";
-
-  // (d) Route on the topic.
-  switch (topic) {
-    // We store no end-customer personal data (only shop/product data), so
-    // there is nothing to return or erase. We log the request as compliance
-    // proof and acknowledge.
-    case "customers/data_request":
-    case "customers/redact": {
-      const shopDomain = extractShopDomain(payload);
-      await logWebhook(topic, shopDomain, payload);
-      return new NextResponse(null, { status: 200 });
+  // From here on we always return 200. Actual processing is deferred to run
+  // after the response is sent, so we stay well under any webhook timeout
+  // even if a delete is slow, and a processing error can never turn into a
+  // non-200 response Shopify would retry.
+  after(async () => {
+    let payload: Record<string, unknown> | null = null;
+    try {
+      payload = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      // Signature was valid but the body wasn't JSON we could parse. Already
+      // acknowledged with 200 above; just log it and move on.
     }
+    const shopDomain = extractShopDomain(payload);
 
-    // Sent 48h after uninstall: erase everything we hold for this shop. We log
-    // topic + shop_domain only (NOT the payload), since we are committing to
-    // delete this shop's data.
-    case "shop/redact": {
-      const shopDomain = extractShopDomain(payload);
-      if (shopDomain) await redactShop(shopDomain);
-      await logWebhook(topic, shopDomain, null);
-      return new NextResponse(null, { status: 200 });
+    try {
+      switch (topic) {
+        // We store no end-customer personal data (only shop/product data), so
+        // there is nothing additional to export or erase per customer. The
+        // logged row is the compliance record of the request.
+        case "customers/data_request":
+        case "customers/redact": {
+          await logWebhook(topic, shopDomain, payload, "ok");
+          break;
+        }
+
+        // Sent 48h after uninstall: erase everything we hold for this shop.
+        // Idempotent - deletes are no-ops if the shop/rows are already gone
+        // (see redactShop in lib/webhookLogs.ts). We log topic + shop_domain
+        // only (NOT the payload), since we are committing to delete this
+        // shop's data.
+        case "shop/redact": {
+          if (!shopDomain) {
+            await logWebhook(topic, shopDomain, null, "no_shop_domain");
+            break;
+          }
+          await redactShop(shopDomain);
+          await logWebhook(topic, shopDomain, null, "ok");
+          break;
+        }
+
+        // Not a GDPR compliance topic, but handled here for the same
+        // idempotent-processing guarantees. Cuts billing entitlements
+        // immediately instead of waiting on a separate
+        // app_subscriptions/update webhook. No-op if we never had a
+        // billing_state row for this shop.
+        case "app/uninstalled": {
+          if (shopDomain) {
+            await applySubscriptionWebhook(shopDomain, "inactive", null);
+          }
+          await logWebhook(topic, shopDomain, payload, "ok");
+          break;
+        }
+
+        // Unknown topic: still logged and acknowledged so Shopify never
+        // retries.
+        default: {
+          await logWebhook(topic, shopDomain, payload, "ok");
+        }
+      }
+    } catch (err) {
+      console.error(
+        `[webhook] ${topic} processing failed for ${shopDomain ?? "unknown"}: ${String(err)}`,
+      );
+      await logWebhook(topic, shopDomain, null, `error: ${String(err)}`);
     }
+  });
 
-    // (e) Unknown topic: log but still 200, so Shopify does not retry.
-    default: {
-      const shopDomain = extractShopDomain(payload);
-      await logWebhook(topic || "unknown", shopDomain, payload);
-      return new NextResponse(null, { status: 200 });
-    }
-  }
-}
-
-// Shop domain lives under `shop_domain` in the GDPR payloads. Normalize to the
-// same lowercase form the OAuth callback stores.
-function extractShopDomain(payload: Record<string, unknown>): string | null {
-  const raw = payload["shop_domain"];
-  return typeof raw === "string" ? raw.trim().toLowerCase() : null;
+  return new NextResponse(null, { status: 200 });
 }

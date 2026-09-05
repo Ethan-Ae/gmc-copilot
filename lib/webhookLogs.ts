@@ -20,27 +20,45 @@ async function ensureSchema(): Promise<void> {
       received_at timestamptz default now()
     )
   `;
+  // Self-healing migration: records the outcome of processing (e.g. "ok",
+  // "no_shop_domain", or an error message), so the compliance log shows
+  // topic + shop + result for every webhook, not just that one arrived.
+  await sql`alter table webhook_logs add column if not exists result text`;
   ready = true;
 }
 
 // Compliance-proof log line. For customers/* topics we keep the full payload;
 // for shop/redact we deliberately pass payload = null since we are about to
-// erase everything else we hold about that shop.
+// erase everything else we hold about that shop. `result` records the
+// processing outcome (defaults to "ok").
 export async function logWebhook(
   topic: string,
   shopDomain: string | null,
   payload: unknown | null,
+  result: string = "ok",
 ): Promise<void> {
-  await ensureSchema();
-  const sql = db();
-  await sql`
-    insert into webhook_logs (topic, shop_domain, payload)
-    values (
-      ${topic},
-      ${shopDomain},
-      ${payload === null ? null : JSON.stringify(payload)}
-    )
-  `;
+  // Always visible in server logs, even if the DB write below fails - this is
+  // the "server-side logging" requirement, independent of the compliance-proof
+  // DB row.
+  console.log(`[webhook] topic=${topic} shop=${shopDomain ?? "unknown"} result=${result}`);
+  try {
+    await ensureSchema();
+    const sql = db();
+    await sql`
+      insert into webhook_logs (topic, shop_domain, payload, result)
+      values (
+        ${topic},
+        ${shopDomain},
+        ${payload === null ? null : JSON.stringify(payload)},
+        ${result}
+      )
+    `;
+  } catch (err) {
+    // Never let a logging failure surface as a webhook processing error.
+    console.error(
+      `[webhook] failed to persist log row for ${topic}/${shopDomain ?? "unknown"}: ${String(err)}`,
+    );
+  }
 }
 
 // Erase every row we hold for a shop, triggered by shop/redact (sent 48h after
