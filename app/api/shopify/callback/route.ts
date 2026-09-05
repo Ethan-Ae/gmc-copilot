@@ -13,11 +13,12 @@ import {
   signPendingShop,
 } from "../../../../lib/pendingShopClaim";
 import { persistOAuthTokens } from "../../../../lib/shopifyToken";
+import { ensureWebhookSubscription } from "../../../../lib/webhookRegistration";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const { apiKey, apiSecret } = getEnv();
+  const { apiKey, apiSecret, appUrl } = getEnv();
   const params = req.nextUrl.searchParams;
 
   const shop = params.get("shop")?.trim().toLowerCase();
@@ -90,6 +91,25 @@ export async function GET(req: NextRequest) {
   // Persist the token pair + expirations so the connection survives without
   // reinstalling and can be refreshed server-side.
   await persistOAuthTokens(shop, tokenJson.scope ?? null, userId, tokenJson);
+
+  // Register APP_UNINSTALLED via the Admin API: use_legacy_install_flow
+  // disallows app-specific subscriptions in shopify.app.toml ("App-specific
+  // webhook subscriptions are not supported when use_legacy_install_flow is
+  // enabled" on `shopify app deploy`), so this topic can only be wired up
+  // per-shop, here, after every (re)install. Idempotent - ensureWebhookSubscription
+  // lists first and only creates when missing - and never allowed to fail the
+  // install: a webhook registration hiccup must not block a merchant from
+  // connecting their store.
+  try {
+    await ensureWebhookSubscription(
+      shop,
+      tokenJson.access_token,
+      "APP_UNINSTALLED",
+      `${appUrl}/api/webhooks/shopify`,
+    );
+  } catch (err) {
+    console.error(`[oauth callback] failed to register app/uninstalled webhook for ${shop}: ${String(err)}`);
+  }
 
   // Installed without an account: the row stays orphaned (user_id NULL) and a
   // signed, short-lived cookie carries the shop through sign-up, where

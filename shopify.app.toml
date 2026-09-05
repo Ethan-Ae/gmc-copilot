@@ -29,7 +29,3 @@ redirect_urls = [ "https://feedcompliant.com/api/shopify/callback" ]
 [[webhooks.subscriptions]]
 compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
 uri = "https://feedcompliant.com/api/webhooks/shopify"
-
-[[webhooks.subscriptions]]
-topics = ["app/uninstalled"]
-uri = "https://feedcompliant.com/api/webhooks/shopify"
