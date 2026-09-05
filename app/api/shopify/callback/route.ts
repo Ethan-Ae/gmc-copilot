@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../lib/apiJson";
-import { getEnv, isValidShop, verifyHmac } from "../../../../lib/shopify";
+import {
+  getEnv,
+  isSafeReturnPath,
+  isValidShop,
+  verifyHmac,
+} from "../../../../lib/shopify";
 import {
   PENDING_SHOP_COOKIE,
   PENDING_SHOP_TTL_SECONDS,
@@ -24,12 +29,29 @@ export async function GET(req: NextRequest) {
     return jsonResponse({ error: "Missing shop or code" }, { status: 400 });
   }
 
-  // state = `${randomHex}.${userId}`; randomHex is checked against the cookie.
-  // The userId part is empty for an App Store install started without a session.
-  const [randomHex, ...userIdParts] = (state ?? "").split(".");
-  const stateUserId = userIdParts.join(".") || null;
+  // state = `${randomHex}.${base64url(JSON.stringify({userId, returnTo}))}`;
+  // randomHex is checked against the cookie (CSRF). base64url never contains
+  // "." so this split is unambiguous - see app/api/shopify/auth/route.ts.
+  const [randomHex, payloadB64] = (state ?? "").split(".");
   if (!randomHex || !cookieState || randomHex !== cookieState) {
     return jsonResponse({ error: "Invalid state" }, { status: 403 });
+  }
+
+  let stateUserId: string | null = null;
+  let returnTo: string | null = null;
+  if (payloadB64) {
+    try {
+      const payload = JSON.parse(
+        Buffer.from(payloadB64, "base64url").toString("utf8"),
+      ) as { userId?: unknown; returnTo?: unknown };
+      if (typeof payload.userId === "string") stateUserId = payload.userId;
+      if (typeof payload.returnTo === "string" && isSafeReturnPath(payload.returnTo)) {
+        returnTo = payload.returnTo;
+      }
+    } catch {
+      // Malformed state payload: proceed without a userId/returnTo rather than
+      // failing the whole flow, same as before this field existed.
+    }
   }
 
   // Prefer the userId captured when the flow started; fall back to a live
@@ -75,7 +97,7 @@ export async function GET(req: NextRequest) {
   // Store merchant is a new user; Clerk shows the sign-in link on that page.
   if (!userId) {
     const signUpUrl = new URL("/sign-up", req.nextUrl.origin);
-    signUpUrl.searchParams.set("redirect_url", "/dashboard");
+    signUpUrl.searchParams.set("redirect_url", returnTo ?? "/dashboard");
     const res = NextResponse.redirect(signUpUrl, { status: 303 });
     res.cookies.delete("shopify_oauth_state");
     res.cookies.set(PENDING_SHOP_COOKIE, signPendingShop(shop), {
@@ -88,9 +110,11 @@ export async function GET(req: NextRequest) {
     return res;
   }
 
-  // Connection done: hand the merchant back to their dashboard.
-  const dashboardUrl = new URL("/dashboard", req.nextUrl.origin);
-  const res = NextResponse.redirect(dashboardUrl, { status: 303 });
+  // Connection done: return to where the flow started (e.g. the report page
+  // for a reconnect, see ReauthBanner in app/report/page.tsx), or the
+  // dashboard by default when no returnTo was carried (first-time connect).
+  const destinationUrl = new URL(returnTo ?? "/dashboard", req.nextUrl.origin);
+  const res = NextResponse.redirect(destinationUrl, { status: 303 });
   res.cookies.delete("shopify_oauth_state");
   return res;
 }

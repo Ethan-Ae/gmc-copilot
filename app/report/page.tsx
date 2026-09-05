@@ -167,11 +167,13 @@ function ReportInner() {
   const shop = params.get("shop")?.trim().toLowerCase() ?? "";
   const [state, setState] = useState<State>({ status: "idle" });
 
+  // A /report opened with no "shop" param at all (broken/hand-edited link)
+  // has nothing to audit: send the merchant to the dashboard to pick a shop
+  // instead of showing a dead page.
   useEffect(() => {
-    // No shop in the URL is a navigation mistake, not an audit failure - send
-    // the merchant back to the dashboard instead of showing an error screen.
     if (!shop) router.replace("/dashboard");
   }, [shop, router]);
+
   // Bumped on every retry so a poll loop from a previous attempt stops itself
   // instead of racing the new one.
   const runId = useRef(0);
@@ -277,21 +279,23 @@ function ReportInner() {
     <main className="flex-1 flex flex-col">
       <Masthead shop={shop || undefined} />
       <div className="mx-auto w-full max-w-3xl px-5 py-10 flex-1">
-        {state.status === "idle" && <LoadingView progressStep={null} />}
-        {state.status === "loading" && (
+        {shop && state.status === "idle" && <LoadingView progressStep={null} />}
+        {shop && state.status === "loading" && (
           <LoadingView progressStep={state.progressStep} />
         )}
-        {state.status === "not-connected" && <NotConnectedView shop={shop} />}
-        {state.status === "error" && (
+        {shop && state.status === "not-connected" && (
+          <NotConnectedView shop={shop} />
+        )}
+        {shop && state.status === "error" && (
           <ErrorView message={state.message} onRetry={retry} />
         )}
-        {state.status === "timeout" && (
+        {shop && state.status === "timeout" && (
           <ErrorView
             message="L'audit prend plus de temps que prevu et a ete interrompu. Reessaie dans un instant."
             onRetry={retry}
           />
         )}
-        {state.status === "ok" && (
+        {shop && state.status === "ok" && (
           <ResultView data={state.data} onRetry={retry} />
         )}
       </div>
@@ -402,15 +406,19 @@ function GmcBanner() {
 // above still ran and is still usable; this only affects shipping-policy
 // cross-checks against real zones/markets.
 function ReauthBanner({ shop }: { shop: string }) {
+  // returnTo brings the merchant straight back to this report once the OAuth
+  // flow completes, instead of dropping them on the dashboard (see
+  // app/api/shopify/auth and app/api/shopify/callback).
+  const returnTo = `/report?shop=${encodeURIComponent(shop)}`;
+  const reconnectHref =
+    `/api/shopify/auth?shop=${encodeURIComponent(shop)}` +
+    `&returnTo=${encodeURIComponent(returnTo)}`;
   return (
     <div className="rounded-2xl border border-line bg-ink-soft px-4 py-3 text-sm text-muted">
-      Cette boutique a ete connectee avant l&apos;ajout des autorisations
-      livraison et marches - certains controles (zones, pays, devises) n&apos;ont
-      pas pu etre verifies.{" "}
-      <a
-        href={`/api/shopify/auth?shop=${encodeURIComponent(shop)}`}
-        className="text-brand underline"
-      >
+      Cette boutique a été connectée avant l&apos;ajout des autorisations
+      livraison et marchés - certains contrôles (zones, pays, devises)
+      n&apos;ont pas pu être vérifiés.{" "}
+      <a href={reconnectHref} className="text-brand underline">
         Reconnecter Shopify
       </a>
     </div>
@@ -776,6 +784,82 @@ type FixResult =
   | MultiPreviewResult
   | MultiAppliedResult;
 
+// True for the two fixTypes whose value is HTML (Shopify's rich text editor
+// output): a product's descriptionHtml, and any policy body (fixType "policy"
+// or "partial" always write a full HTML body via shopPolicyUpdate). Every
+// other field (title, seo.title/description, productType, vendor, tags,
+// compareAtPrice) is plain text and must never be parsed as markup.
+function isHtmlPatch(patch: FixPatch): boolean {
+  if (patch.fixType === "policy" || patch.fixType === "partial") return true;
+  return patch.fixType === "product_seo" && patch.field === "descriptionHtml";
+}
+
+// Renders a preview value: sanitized, rendered HTML for the two HTML fields
+// above (so the merchant sees formatted text instead of raw "<p>" tags), a
+// plain paragraph otherwise. Sanitization happens client-side only (dompurify
+// is dynamically imported so it never runs during SSR, where there is no DOM
+// for it to use).
+function FieldPreview({ value, patch }: { value: string; patch: FixPatch }) {
+  if (!isHtmlPatch(patch)) {
+    return <p className="text-ink">{value || "(vide)"}</p>;
+  }
+  return <HtmlPreview html={value} />;
+}
+
+const ALLOWED_HTML_TAGS = [
+  "p",
+  "br",
+  "strong",
+  "em",
+  "b",
+  "i",
+  "u",
+  "ul",
+  "ol",
+  "li",
+  "a",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "span",
+  "div",
+  "blockquote",
+];
+
+function HtmlPreview({ html }: { html: string }) {
+  const [clean, setClean] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!html.trim()) {
+      setClean(null);
+      return;
+    }
+    let cancelled = false;
+    import("dompurify").then(({ default: DOMPurify }) => {
+      if (cancelled) return;
+      setClean(
+        DOMPurify.sanitize(html, {
+          ALLOWED_TAGS: ALLOWED_HTML_TAGS,
+          ALLOWED_ATTR: ["href"],
+        }),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [html]);
+
+  if (!html.trim()) return <p className="text-ink">(vide)</p>;
+  if (clean === null) return <p className="text-ink">{html}</p>;
+  return (
+    <div
+      className="text-ink mt-1 space-y-1 [&_a]:underline [&_a]:text-brand [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+      dangerouslySetInnerHTML={{ __html: clean }}
+    />
+  );
+}
+
 function FixActions({
   shop,
   auditId,
@@ -931,15 +1015,15 @@ function FixActions({
       </div>
 
       {result?.kind === "preview" && (
-        <div className="mt-3 text-sm space-y-1">
-          <p className="text-muted">
-            <span className="tech-label text-faint">Actuel</span> :{" "}
-            <span className="text-ink">{result.currentLive || "(vide)"}</span>
-          </p>
-          <p className="text-muted">
-            <span className="tech-label text-faint">Propose</span> :{" "}
-            <span className="text-ink">{result.newValue || "(vide)"}</span>
-          </p>
+        <div className="mt-3 text-sm space-y-3">
+          <div className="text-muted">
+            <span className="tech-label text-faint">Actuel</span>
+            <FieldPreview value={result.currentLive || ""} patch={patch} />
+          </div>
+          <div className="text-muted">
+            <span className="tech-label text-faint">Propose</span>
+            <FieldPreview value={result.newValue || ""} patch={patch} />
+          </div>
           {result.drift && (
             <p className="text-warn font-medium">
               Modifie depuis l&apos;audit

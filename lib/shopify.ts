@@ -33,6 +33,16 @@ export function isValidShop(shop: string): boolean {
   return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop);
 }
 
+// Used to validate the optional "returnTo" carried through the OAuth state
+// (see app/api/shopify/auth and app/api/shopify/callback): only a same-app
+// relative path is ever accepted, so a forged value can never turn the OAuth
+// callback into an open redirect to an external host. Rejects an absolute URL
+// (contains "://"), a protocol-relative one ("//host/..."), and anything not
+// starting with exactly one leading slash.
+export function isSafeReturnPath(path: string): boolean {
+  return /^\/(?!\/)\S*$/.test(path) && !path.includes("://");
+}
+
 export function verifyHmac(query: URLSearchParams, secret: string): boolean {
   const hmac = query.get("hmac");
   if (!hmac) return false;

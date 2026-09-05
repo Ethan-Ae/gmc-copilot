@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../lib/apiJson";
-import { getEnv, isValidShop } from "../../../../lib/shopify";
+import { getEnv, isSafeReturnPath, isValidShop } from "../../../../lib/shopify";
 
 export const runtime = "nodejs";
 
@@ -22,10 +22,24 @@ export async function GET(req: NextRequest) {
   // callback stores the shop unclaimed and the account is linked after sign-up.
   const { userId } = await auth();
 
-  // Anti-CSRF random lives in the cookie; the full state carries the userId when
-  // we already have one (merchant connecting from their dashboard).
+  // Optional: where to send the merchant back after a successful connection,
+  // e.g. the report page when this is a reconnect prompted by needsReauth
+  // (see app/report/page.tsx's ReauthBanner). Only a same-app relative path is
+  // accepted; anything else (or absent) falls back to the dashboard in the
+  // callback. Carried inside the signed-by-cookie state, not as its own query
+  // param, so it cannot be tampered with independently of the CSRF check.
+  const returnToRaw = req.nextUrl.searchParams.get("returnTo");
+  const returnTo = returnToRaw && isSafeReturnPath(returnToRaw) ? returnToRaw : null;
+
+  // Anti-CSRF random lives in the cookie; the payload carries the userId (when
+  // we already have one, e.g. merchant connecting from their dashboard) and
+  // the optional returnTo above, base64url-encoded so it never collides with
+  // the "." separator used against the random prefix.
   const randomHex = crypto.randomBytes(16).toString("hex");
-  const state = `${randomHex}.${userId ?? ""}`;
+  const statePayload = Buffer.from(
+    JSON.stringify({ userId: userId ?? null, returnTo }),
+  ).toString("base64url");
+  const state = `${randomHex}.${statePayload}`;
   const redirectUri = `${appUrl}/api/shopify/callback`;
 
   const authUrl =

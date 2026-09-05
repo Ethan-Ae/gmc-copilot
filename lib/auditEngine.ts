@@ -107,13 +107,15 @@ Audit the STORE POLICIES (part 3) in addition:
   the storefront is password protected, so audit them normally in every case.
 - A policy body is considered absent/unusable (not just "empty") when it is:
   missing, empty, under 100 characters, random/dummy text (e.g. a placeholder
-  string of letters, "lorem ipsum"), or still contains an unfilled Shopify
-  template placeholder such as "[INSERT RETURN ADDRESS]" or any other
-  "[INSERT ...]" bracket. Treat all of these as needing a full rewrite, see the
-  fixType "partial" rule below - never leave them as "manual_only" when a
-  rewrite can be built from the real data you were given (part 1: shop name,
-  contact email, billing address, currency, active market countries in
-  shopInfo/marketsData; shippingData for delivery zones, countries and rates).
+  string of letters, "lorem ipsum"), or still contains an unfilled placeholder
+  - a raw Shopify template one such as "[INSERT RETURN ADDRESS]"/"[INSERT ...]",
+  or one of your own earlier "[À COMPLÉTER : ...]" markers left unfilled.
+  Treat all of these as needing a rewrite: use fixType "partial" ONLY when
+  every fact needed is present in the data you were given (part 1) so the
+  rewrite has zero placeholders; use fixType "manual_only" when at least one
+  fact is missing everywhere in the data, see the rule below - a policy
+  currently containing an unfilled placeholder is itself always reported as
+  "manual_only", never "partial".
 - A policy that already has real, substantial content but is missing one
   precise, checkable point (e.g. no refund delay stated, no processing time)
   is also correctable: see fixType "partial" below for the append-only patch.
@@ -155,35 +157,43 @@ exact replacement:
   problems, "business_identity" for legal/business identity, and "manual_only"
   when the merchant must act by hand.
 - "partial" covers store policy issues and always writes the whole policy body
-  back via shopPolicyUpdate. There are exactly two cases:
-  1. The policy body is absent/empty/dummy/under 100 characters, or contains
-     an unfilled "[INSERT ...]" placeholder (see the STORE POLICIES rule
-     above): "newValue" is the FULL replacement body, built only from real
-     data given to you in part 1 (shop name, contact email, billing address,
-     currency, active market countries, shipping zones/countries/rates,
-     delays if present in shippingData). For any fact needed to write a
-     complete policy that is NOT present in the data (e.g. no return window,
-     no processing delay found anywhere), write an explicit placeholder
-     instead of inventing it, in the exact form
-     "[À COMPLÉTER : délai de remboursement]" (one bracket per missing fact,
-     name the missing fact clearly, always in French with correct accents).
-     Never leave the sentence vague or silently drop it.
+  back via shopPolicyUpdate, and ONLY when the result needs NO placeholder at
+  all - every fact used is proven by the data you were given (part 1: shop
+  name, contact email, billing address, currency, active market countries,
+  shipping zones/countries/rates, delays if present in shippingData). There
+  are exactly two such cases:
+  1. The policy body is absent/empty/dummy/under 100 characters: "newValue" is
+     the FULL replacement body, built only from that real data.
   2. The policy body already has real, substantial content but is missing one
-     precise, checkable point: "newValue" is the FULL existing body with ONLY
-     the missing paragraph appended at the end, unchanged otherwise - never
-     rewrite or reformat the existing text, never fill the gap with an
-     invented fact, use the "[À COMPLÉTER : ...]" placeholder form above if
-     the real data does not contain it either.
+     precise, checkable point that IS present in the data: "newValue" is the
+     FULL existing body with ONLY the missing paragraph appended at the end,
+     unchanged otherwise - never rewrite or reformat the existing text.
   "currentValue" is the exact current body (or "" if the policy does not
   exist yet).
-- Keep "manual_only" for store policies only in these cases: the storefront is
+- PLACEHOLDERS ARE ALWAYS "manual_only", NEVER "partial": if, for either case
+  above, at least one fact needed is missing everywhere in the data (e.g. no
+  return window, no processing delay found anywhere), do NOT use "partial" and
+  do NOT write a "[À COMPLÉTER : ...]" bracket into an autoApplicable
+  "newValue" - a live Shopify policy must never be overwritten with visible
+  placeholder text. Use fixType "manual_only" and "autoApplicable": false
+  instead. Write "fix" as the exact list of fields still to fill in, named
+  clearly in French with correct accents (e.g. "delai de remboursement",
+  "adresse de retour"), followed by the exact path "Shopify Admin > Parametres
+  > Politiques > [nom de la politique]" where the merchant enters them by
+  hand. This also applies whenever the CURRENT policy body (part 3) already
+  contains an unfilled placeholder left over from before (a raw Shopify
+  "[INSERT ...]" or one of your own earlier "[À COMPLÉTER : ...]" markers):
+  that is itself the issue to report, always "manual_only" with the same
+  field list and path, never "partial" - never propose writing the same or
+  another placeholder back.
+- Keep "manual_only" for store policies also in these cases: the storefront is
   password protected (existing rule above), the store has zero products, a
   shipping policy issue where Shopify itself has no delivery zone configured
   (shippingData empty/missing the relevant zone - nothing to describe), or the
   business identity/contact info needed is missing everywhere in the data
-  (nothing to build even a placeholder-filled draft from). Do not default a
-  policy issue to "manual_only" for any other reason; if there is at least a
-  shop name or contact email to build a draft from, use "partial".
+  (nothing to build even a description of what is missing). Do not default a
+  policy issue to "manual_only" for any other reason; if every fact needed is
+  present in the data, use "partial".
 - Set "field" to the exact field written, consistent with "fixType" (this is
   a closed enum on the tool, any other value is refused by the server):
   "product_seo" -> "title", "descriptionHtml", "seo.title", "seo.description",
@@ -314,7 +324,7 @@ const AUDIT_TOOL: Anthropic.Tool = {
                     "manual_only",
                   ],
                   description:
-                    "Kind of correction. product_seo/product_compare_at target Shopify product data. policy/partial target a store policy page: use 'partial' when the body must be fully rewritten from real shop/shipping data (absent, empty, dummy or containing an unfilled [INSERT ...] placeholder) or when only a missing paragraph must be appended to an existing real body. page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
+                    "Kind of correction. product_seo/product_compare_at target Shopify product data. policy/partial target a store policy page: use 'partial' ONLY when the body can be fully rewritten (or completed with one appended paragraph) using facts already proven by the data, with zero '[À COMPLÉTER : ...]' placeholder in newValue. If any fact is missing everywhere, or the policy already contains an unfilled placeholder, use 'manual_only' instead and describe the missing fields plus the Shopify Admin path in 'fix'. page/theme/business_identity target storefront content that cannot be changed via a safe automated write.",
                 },
                 field: {
                   type: ["string", "null"],
@@ -373,7 +383,7 @@ const AUDIT_TOOL: Anthropic.Tool = {
                 newValue: {
                   type: "string",
                   description:
-                    "The exact proposed replacement for product_seo/product_compare_at/policy/partial. For 'partial' it is always the FULL policy body to write (either a complete rewrite built only from real data, with '[À COMPLÉTER : ...]' placeholders for facts missing everywhere, or the existing body plus one appended missing paragraph - never an instruction). For theme/business_identity/page/manual_only it may be a written instruction instead of a literal value. For a multi-product fix (targetIds), one representative product's proposed value, for display only - the server computes the real per-product value from findText/replaceText. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data. When it is French merchant-facing text (policy/partial, or a written instruction), use correct French with all accents (é, è, ê, à, ç) - never text without accents.",
+                    "The exact proposed replacement for product_seo/product_compare_at/policy/partial. For 'partial' it is always the FULL policy body to write, with ZERO '[À COMPLÉTER : ...]' placeholder - either a complete rewrite built only from real data, or the existing body plus one appended missing paragraph, never an instruction. If any fact is missing everywhere, use fixType 'manual_only' instead (see above) and put the exact list of missing fields plus the Shopify Admin path in 'fix', not a placeholder in newValue. For theme/business_identity/page/manual_only, newValue may be a written instruction instead of a literal value. For a multi-product fix (targetIds), one representative product's proposed value, for display only - the server computes the real per-product value from findText/replaceText. Respect the zero-invention rule: never introduce a fact, price, delay, review or claim that is not already proven in the provided data. When it is French merchant-facing text (policy/partial, or a written instruction), use correct French with all accents (é, è, ê, à, ç) - never text without accents.",
                 },
                 autoApplicable: {
                   type: "boolean",
@@ -424,8 +434,166 @@ function collectFrenchText(audit: Record<string, unknown>): string {
   return parts.join(" ");
 }
 
-function hasAccentedChar(s: string): boolean {
-  return /[À-ÖØ-öø-ÿ]/.test(s);
+// Counts only the specific accented letters most common in our audits (both
+// cases). A boolean presence check let a report through with a single stray
+// accented character surrounded by hundreds of unaccented ones - counting
+// catches that case too.
+function countAccentedChars(s: string): number {
+  const matches = s.match(/[éèêàçùôîÉÈÊÀÇÙÔÎ]/g);
+  return matches ? matches.length : 0;
+}
+
+// True when there is enough French text to judge (over 300 characters) and
+// it is suspiciously under-accented (fewer than 5 accented characters in
+// total) - the threshold that triggers the retry/fallback below.
+function needsAccentFix(frenchText: string): boolean {
+  return frenchText.length > 300 && countAccentedChars(frenchText) < 5;
+}
+
+// Last-resort local correction when the model still returns unaccented French
+// after the retry: a fixed dictionary of the words most frequent in our
+// audits, unaccented -> correctly accented. Deliberately conservative - every
+// key is a word whose unaccented spelling is not itself a different, valid
+// French word, so a blind replace can never introduce a wrong word.
+const ACCENT_DICTIONARY: Record<string, string> = {
+  deja: "déjà", degrade: "dégradé", degradee: "dégradée", delai: "délai",
+  delais: "délais", depasse: "dépassé", depassee: "dépassée",
+  derriere: "derrière", donnee: "donnée", donnees: "données", ecart: "écart",
+  ecrit: "écrit", element: "élément", elements: "éléments", eligible: "éligible",
+  entierement: "entièrement", etape: "étape", etapes: "étapes", etat: "état",
+  ete: "été", etre: "être", exterieur: "extérieur", facturee: "facturée",
+  frequent: "fréquent", frequente: "fréquente", generale: "générale",
+  generalement: "généralement", identite: "identité", inegalite: "inégalité",
+  inferieur: "inférieur", inferieure: "inférieure",
+  integralement: "intégralement", interet: "intérêt", invente: "inventé",
+  inventee: "inventée", legale: "légale", legales: "légales",
+  legalement: "légalement", legere: "légère", legerement: "légèrement",
+  livree: "livrée", livrees: "livrées", marche: "marché", marches: "marchés",
+  mentionne: "mentionné", mentionnee: "mentionnée", methode: "méthode",
+  modele: "modèle", necessaire: "nécessaire", necessaires: "nécessaires",
+  numero: "numéro", operation: "opération", particuliere: "particulière",
+  periode: "période", posterieur: "postérieur", precis: "précis",
+  precise: "précise", precisee: "précisée", presente: "présente",
+  presentee: "présentée", presomption: "présomption", probleme: "problème",
+  problemes: "problèmes", protege: "protégé", protegee: "protégée",
+  proteges: "protégés", protegees: "protégées", publiee: "publiée",
+  realise: "réalisé", realisee: "réalisée", reelle: "réelle",
+  reellement: "réellement", reference: "référence", references: "références",
+  regle: "règle", regles: "règles", reglementation: "réglementation",
+  rembourse: "remboursé", remboursee: "remboursée", remede: "remède",
+  repondre: "répondre", reponse: "réponse", responsabilite: "responsabilité",
+  resultat: "résultat", reviseur: "réviseur", secheresse: "sécheresse",
+  securite: "sécurité", separement: "séparément", severite: "sévérité",
+  siege: "siège", specifique: "spécifique", specifie: "spécifié",
+  specifiee: "spécifiée", superieur: "supérieur", superieure: "supérieure",
+  systeme: "système", telephone: "téléphone", theme: "thème", tres: "très",
+  unifiee: "unifiée", utilisee: "utilisée", verification: "vérification",
+  verifiee: "vérifiée", verifiees: "vérifiées", verifier: "vérifier",
+  verifies: "vérifiés", veritable: "véritable",
+};
+
+// Applies ACCENT_DICTIONARY to one string, preserving simple casing (all
+// caps, capitalized, or lowercase) so a sentence-initial word still comes out
+// capitalized.
+function applyAccentDictionary(text: string): string {
+  let out = text;
+  for (const [bare, accented] of Object.entries(ACCENT_DICTIONARY)) {
+    if (bare === accented) continue;
+    const re = new RegExp(`\\b${bare}\\b`, "gi");
+    out = out.replace(re, (match) => {
+      if (match === match.toUpperCase() && match !== match.toLowerCase()) {
+        return accented.toUpperCase();
+      }
+      if (match[0] === match[0].toUpperCase()) {
+        return accented[0].toUpperCase() + accented.slice(1);
+      }
+      return accented;
+    });
+  }
+  return out;
+}
+
+// Mutates every French merchant-facing field in place (summary, each issue's
+// problem/fix, each patch's newValue) - the last-resort fallback when even
+// the retry in runAuditForShop still comes back under-accented.
+function applyAccentDictionaryToAudit(audit: Record<string, unknown>): void {
+  if (typeof audit.summary === "string") {
+    audit.summary = applyAccentDictionary(audit.summary);
+  }
+  const issues = Array.isArray(audit.issues) ? audit.issues : [];
+  for (const issue of issues) {
+    if (!issue || typeof issue !== "object") continue;
+    const i = issue as Record<string, unknown>;
+    if (typeof i.problem === "string") i.problem = applyAccentDictionary(i.problem);
+    if (typeof i.fix === "string") i.fix = applyAccentDictionary(i.fix);
+    const patch = i.patch;
+    if (patch && typeof patch === "object") {
+      const p = patch as Record<string, unknown>;
+      if (typeof p.newValue === "string") p.newValue = applyAccentDictionary(p.newValue);
+    }
+  }
+}
+
+// Matches an unresolved policy placeholder: the model's own
+// "[À COMPLÉTER : ...]" marker (accent-tolerant on the leading word, in case
+// the model drops it), or a raw, never-filled Shopify template placeholder
+// such as "[INSERT RETURN ADDRESS]".
+const PLACEHOLDER_RE = /\[\s*(?:[AÀ]\s*COMPL[EÉ]TER|INSERT)\b[^\]]*\]/gi;
+
+function findPlaceholders(text: string): string[] {
+  const matches = text.match(PLACEHOLDER_RE) ?? [];
+  return [...new Set(matches)];
+}
+
+const POLICY_LABELS: Record<string, string> = {
+  SHIPPING_POLICY: "Politique de livraison",
+  REFUND_POLICY: "Politique de remboursement",
+  PRIVACY_POLICY: "Politique de confidentialité",
+  TERMS_OF_SERVICE: "Conditions d'utilisation",
+  LEGAL_NOTICE: "Mentions légales",
+  SUBSCRIPTION_POLICY: "Politique d'abonnement",
+};
+
+// Server-side safety net for the placeholder classification rule in SYSTEM
+// above: even if the model ignores the instruction and still proposes an
+// autoApplicable "policy"/"partial" patch whose newValue contains an
+// unresolved placeholder, never let that placeholder text reach a live
+// Shopify policy write. Force the issue to "manual_only" with the exact list
+// of missing fields and the exact Shopify Admin path instead.
+function enforcePlaceholderGuard(audit: Record<string, unknown>): void {
+  const issues = Array.isArray(audit.issues) ? audit.issues : [];
+  for (const issue of issues) {
+    if (!issue || typeof issue !== "object") continue;
+    const i = issue as Record<string, unknown>;
+    const patch = i.patch;
+    if (!patch || typeof patch !== "object") continue;
+    const p = patch as Record<string, unknown>;
+    if (p.fixType !== "policy" && p.fixType !== "partial") continue;
+
+    const newValue = typeof p.newValue === "string" ? p.newValue : "";
+    const placeholders = findPlaceholders(newValue);
+    if (placeholders.length === 0) continue;
+
+    const policyType = typeof p.targetId === "string" ? p.targetId : null;
+    const label = (policyType && POLICY_LABELS[policyType]) || "cette politique";
+    const fields = placeholders
+      .map((ph) =>
+        ph
+          .replace(/^\[\s*(?:[AÀ]\s*COMPL[EÉ]TER|INSERT)\s*:?\s*/i, "")
+          .replace(/\]\s*$/, "")
+          .trim(),
+      )
+      .filter(Boolean);
+
+    p.fixType = "manual_only";
+    p.autoApplicable = false;
+    p.field = null;
+    i.fix =
+      (fields.length
+        ? `À compléter manuellement : ${fields.join(", ")}.`
+        : "Informations manquantes à compléter manuellement.") +
+      ` Dans Shopify Admin > Paramètres > Politiques > ${label}.`;
+  }
 }
 
 // A Shopify Admin GraphQL call that must never throw: any network error or
@@ -931,13 +1099,17 @@ export async function runAuditForShop(opts: {
     let finalStopReason = msg.stop_reason;
     let audit = toolBlock.input as Record<string, unknown>;
 
-    // The model sometimes strips French accents despite the instruction. If the
-    // combined French text is long enough to judge and has zero accented
-    // character, retry once with an explicit correction request before
-    // accepting the result - cheaper than shipping unaccented French to a
-    // merchant and it self-corrects on the same tool call.
-    const frenchText = collectFrenchText(audit);
-    if (frenchText.length > 200 && !hasAccentedChar(frenchText)) {
+    // The model sometimes strips French accents despite the instruction. Count
+    // accented characters across the whole audit rather than trusting a
+    // boolean presence check (a single stray accent among hundreds of bare
+    // letters must still trigger correction). Over the length/count threshold,
+    // retry once with an explicit correction request; if that still fails,
+    // fall back to a local dictionary rewrite rather than shipping unaccented
+    // French to a merchant.
+    let accentRetries = 0;
+    let frenchText = collectFrenchText(audit);
+    if (needsAccentFix(frenchText)) {
+      accentRetries = 1;
       const retryMsg = await anthropic.messages.create(
         {
           model,
@@ -955,14 +1127,9 @@ export async function runAuditForShop(opts: {
                   type: "tool_result",
                   tool_use_id: toolBlock.id,
                   content:
-                    'Erreur: ce rapport ne contient aucun caractere accentue, ' +
-                    "alors que le francais correct en utilise (e.g. \"protegee\" " +
-                    'doit s\'ecrire "protégée", "donnees" doit s\'ecrire ' +
-                    '"données"). Rappelle report_audit avec exactement le meme ' +
-                    "contenu mais en francais correct, avec tous les accents " +
-                    "necessaires (é, è, ê, à, ù, ç, î, ô...) sur summary, " +
-                    "chaque issue (problem, fix) et chaque patch.newValue en " +
-                    "francais.",
+                    "Réécris exactement le même audit en français correct " +
+                    "avec tous les accents. Ne change ni le sens ni la " +
+                    "structure.",
                 },
               ],
             },
@@ -976,8 +1143,24 @@ export async function runAuditForShop(opts: {
       if (retryToolBlock) {
         finalStopReason = retryMsg.stop_reason;
         audit = retryToolBlock.input as Record<string, unknown>;
+        frenchText = collectFrenchText(audit);
+      }
+
+      if (needsAccentFix(frenchText)) {
+        accentRetries = 2;
+        applyAccentDictionaryToAudit(audit);
       }
     }
+    if (accentRetries > 0) {
+      console.log(
+        `[auditEngine] accent fix applied for auditId=${auditId}, retries=${accentRetries}`,
+      );
+    }
+
+    // Server-side safety net: never let a policy patch with an unresolved
+    // "[À COMPLÉTER : ...]" placeholder reach the merchant as an
+    // auto-applicable fix, regardless of what fixType the model chose.
+    enforcePlaceholderGuard(audit);
 
     const overall = (audit.overall as string) ?? "unknown";
     const truncated = finalStopReason === "max_tokens";
