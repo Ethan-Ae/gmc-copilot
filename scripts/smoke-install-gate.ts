@@ -47,18 +47,34 @@ function sign(secret: string, params: Record<string, string>): string {
 function buildRequest(
   secret: string,
   extra: Record<string, string> = {},
-  opts: { badHmac?: boolean; staleTimestamp?: boolean } = {},
+  opts: { badHmac?: boolean; staleTimestamp?: boolean; path?: string; skipShop?: boolean } = {},
 ): NextRequest {
   const timestamp = opts.staleTimestamp
     ? String(Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60) // 2 days old
     : String(Math.floor(Date.now() / 1000));
-  const base: Record<string, string> = { shop: SHOP, timestamp, ...extra };
+  const base: Record<string, string> = opts.skipShop
+    ? { ...extra }
+    : { shop: SHOP, timestamp, ...extra };
   const hmac = opts.badHmac ? "0".repeat(64) : sign(secret, base);
-  const url = new URL(APP_URL);
+  const url = new URL(opts.path ?? "/", APP_URL);
   for (const [k, v] of Object.entries(base)) url.searchParams.set(k, v);
-  url.searchParams.set("hmac", hmac);
+  if (!opts.skipShop) url.searchParams.set("hmac", hmac);
   return new NextRequest(url);
 }
+
+// A dep that fails the test the moment it's called - used to prove a case
+// never reaches the DB/network at all (excluded path, or no shop param).
+function unreachable(label: string): (...args: unknown[]) => Promise<never> {
+  return async () => {
+    throw new Error(`should not be called: ${label}`);
+  };
+}
+
+const allUnreachableDeps: InstallGateDeps = {
+  getShopToken: unreachable("getShopToken - path should be excluded before any dep runs"),
+  deleteShopToken: unreachable("deleteShopToken - path should be excluded before any dep runs"),
+  isTokenValid: unreachable("isTokenValid - path should be excluded before any dep runs"),
+};
 
 async function main(): Promise<void> {
   const secret = process.env.SHOPIFY_API_SECRET;
@@ -140,6 +156,31 @@ async function main(): Promise<void> {
         },
       },
       expect: "oauth-breakout",
+    },
+    // Defense-in-depth: the excluded prefixes below must short-circuit on
+    // pathname alone, before shop/hmac are even looked at, so none of the
+    // deps are ever invoked - proven by wiring all three to `unreachable`.
+    {
+      name: "callback (code+hmac, no token)",
+      req: buildRequest(
+        secret,
+        { code: "fake-authorization-code", state: "deadbeef.eyJ1c2VySWQiOm51bGx9" },
+        { path: "/api/shopify/callback" },
+      ),
+      deps: allUnreachableDeps,
+      expect: "pass-through",
+    },
+    {
+      name: "billing return",
+      req: buildRequest(secret, {}, { path: "/api/shopify/billing/return" }),
+      deps: allUnreachableDeps,
+      expect: "pass-through",
+    },
+    {
+      name: "landing sans params",
+      req: buildRequest(secret, {}, { path: "/", skipShop: true }),
+      deps: allUnreachableDeps,
+      expect: "pass-through",
     },
   ];
 

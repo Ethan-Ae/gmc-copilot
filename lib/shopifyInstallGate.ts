@@ -23,19 +23,37 @@ const defaultDeps: InstallGateDeps = {
   isTokenValid: checkTokenValidAgainstShopify,
 };
 
-// Runs in middleware (see proxy.ts) for every non-static, non-webhook
-// request, i.e. the root URL and every other app URL alike. Shopify appends
-// shop+hmac (+timestamp, host, embedded, ...) whenever it opens the app -
-// on first install, on every reinstall after an uninstall, and every time a
-// merchant relaunches it from the Shopify admin. Per Shopify App Review rule
-// 2.3.2, OAuth must run before any UI renders in every one of those cases.
-// Returns a redirect/breakout response when OAuth must happen first, or null
-// when the request either isn't a signed Shopify launch or is already backed
-// by a valid token - in both cases normal routing/rendering proceeds.
+// The gate must NEVER run on the app's own OAuth/billing/webhook/Google
+// machinery, or it self-destructs: /api/shopify/callback lands with a
+// Shopify-signed shop+hmac+code+timestamp on every install, and at that
+// exact moment no token has been persisted yet (the exchange happens inside
+// the callback handler itself, using `code`) - so the gate would see "no
+// token" and bounce back to /api/shopify/auth, which starts a new OAuth
+// round that lands back on the same callback: an infinite loop on every
+// single install. Checked by pathname, independent of the middleware
+// matcher in proxy.ts, so a future matcher change can't silently reopen this.
+const EXCLUDED_PATH_PREFIXES = ["/api/shopify/", "/api/webhooks/", "/api/google/"];
+
+function isExcludedPath(pathname: string): boolean {
+  return EXCLUDED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+// Runs in middleware (see proxy.ts) for every non-static request, i.e. the
+// root URL and every other app URL alike (except the excluded prefixes
+// above). Shopify appends shop+hmac (+timestamp, host, embedded, ...)
+// whenever it opens the app - on first install, on every reinstall after an
+// uninstall, and every time a merchant relaunches it from the Shopify admin.
+// Per Shopify App Review rule 2.3.2, OAuth must run before any UI renders in
+// every one of those cases. Returns a redirect/breakout response when OAuth
+// must happen first, or null when the request either isn't a signed Shopify
+// launch, targets excluded app machinery, or is already backed by a valid
+// token - in all of those cases normal routing/rendering proceeds untouched.
 export async function resolveInboundShopifyRequest(
   req: NextRequest,
   deps: InstallGateDeps = defaultDeps,
 ): Promise<NextResponse | null> {
+  if (isExcludedPath(req.nextUrl.pathname)) return null;
+
   const params = req.nextUrl.searchParams;
   const shop = params.get("shop")?.trim().toLowerCase();
   if (!shop || !isValidShop(shop)) return null;
