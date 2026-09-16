@@ -84,6 +84,18 @@ export async function claimOrphanShop(
   return owner === null ? "not-found" : "already-owned";
 }
 
+// Wipe a shop's stored Shopify connection. Called on app/uninstalled (see
+// app/api/webhooks/shopify/route.ts) so a stale, revoked token never lingers -
+// any later getShopifyAccessToken/gate check then sees "no token" and forces a
+// fresh OAuth instead of trying a dead one. Deliberately only touches `shops`;
+// audits/fix_history/billing_state survive until shop/redact (48h later) or a
+// reinstall repopulates the row.
+export async function deleteShopToken(shop: string): Promise<void> {
+  await ensureSchema();
+  const sql = db();
+  await sql`delete from shops where shop = ${shop}`;
+}
+
 export async function getShopsForUser(
   userId: string,
 ): Promise<{ shop: string; updated_at: string }[]> {

@@ -66,3 +66,18 @@ export function verifyHmac(query: URLSearchParams, secret: string): boolean {
 }
 
 export const SHOPIFY_API_VERSION = "2026-04";
+
+// How stale a signed "timestamp" query param may be before we stop trusting
+// the request enough to act on shop+hmac (see lib/shopifyInstallGate.ts).
+// Shopify does not document a required window; 24h is generous enough to
+// never reject a real launch link while still refusing an old/replayed one.
+export const HMAC_TIMESTAMP_TOLERANCE_SECONDS = 24 * 60 * 60;
+
+export function isHmacTimestampFresh(query: URLSearchParams): boolean {
+  const raw = query.get("timestamp");
+  if (!raw) return false;
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds)) return false;
+  const ageSeconds = Math.abs(Date.now() / 1000 - seconds);
+  return ageSeconds <= HMAC_TIMESTAMP_TOLERANCE_SECONDS;
+}

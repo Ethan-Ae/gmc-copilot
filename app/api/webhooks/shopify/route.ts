@@ -39,12 +39,22 @@ import { after } from "next/server";
 import { verifyWebhookHmac } from "../../../../lib/webhookHmac";
 import { logWebhook, redactShop } from "../../../../lib/webhookLogs";
 import { applySubscriptionWebhook } from "../../../../lib/billingState";
+import { deleteShopToken } from "../../../../lib/db";
 
 export const runtime = "nodejs";
 
-// Shop domain lives under `shop_domain` in the GDPR payloads. Normalize to the
-// same lowercase form the OAuth callback stores.
-function extractShopDomain(payload: Record<string, unknown> | null): string | null {
+// X-Shopify-Shop-Domain is present on every webhook topic, including
+// app/uninstalled - whose payload is a Shop resource with no `shop_domain`
+// field (that field only exists on the GDPR compliance payloads). The header
+// is the reliable source across all topics; the payload field is kept as a
+// fallback for the GDPR topics' documented shape above. Normalize to the same
+// lowercase form the OAuth callback stores.
+function extractShopDomain(
+  req: NextRequest,
+  payload: Record<string, unknown> | null,
+): string | null {
+  const header = req.headers.get("x-shopify-shop-domain")?.trim().toLowerCase();
+  if (header) return header;
   if (!payload) return null;
   const raw = payload["shop_domain"];
   return typeof raw === "string" ? raw.trim().toLowerCase() : null;
@@ -75,7 +85,7 @@ export async function POST(req: NextRequest) {
       // Signature was valid but the body wasn't JSON we could parse. Already
       // acknowledged with 200 above; just log it and move on.
     }
-    const shopDomain = extractShopDomain(payload);
+    const shopDomain = extractShopDomain(req, payload);
 
     try {
       switch (topic) {
@@ -106,11 +116,16 @@ export async function POST(req: NextRequest) {
         // Not a GDPR compliance topic, but handled here for the same
         // idempotent-processing guarantees. Cuts billing entitlements
         // immediately instead of waiting on a separate
-        // app_subscriptions/update webhook. No-op if we never had a
-        // billing_state row for this shop.
+        // app_subscriptions/update webhook (no-op if we never had a
+        // billing_state row for this shop), and deletes the stored access
+        // token so a reinstall is never mistaken for an already-authenticated
+        // session (see lib/shopifyInstallGate.ts) - Shopify has already
+        // revoked it at this point, but leaving it in `shops` would make a
+        // reinstall look "connected" until the next live API call failed.
         case "app/uninstalled": {
           if (shopDomain) {
             await applySubscriptionWebhook(shopDomain, "inactive", null);
+            await deleteShopToken(shopDomain);
           }
           await logWebhook(topic, shopDomain, payload, "ok");
           break;
