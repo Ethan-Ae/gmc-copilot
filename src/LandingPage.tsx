@@ -88,7 +88,7 @@ const AREA_LABEL: Record<Area, string> = {
   "needs-verification": "A verifier",
 };
 
-export default function LandingPage() {
+export default function LandingPage({ appStoreUrl }: { appStoreUrl: string }) {
   const [url, setUrl] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
 
@@ -162,7 +162,9 @@ export default function LandingPage() {
               message={state.message}
             />
           )}
-          {state.status === "success" && <TeaserResult data={state.data} />}
+          {state.status === "success" && (
+            <TeaserResult data={state.data} appStoreUrl={appStoreUrl} />
+          )}
         </section>
       )}
 
@@ -311,7 +313,13 @@ function NoticeView({
   );
 }
 
-function TeaserResult({ data }: { data: TeaserResponse }) {
+function TeaserResult({
+  data,
+  appStoreUrl,
+}: {
+  data: TeaserResponse;
+  appStoreUrl: string;
+}) {
   const verdict = data.overall ? VERDICT[data.overall] : VERDICT.warning;
   const teased = data.teaserIssues ?? [];
 
@@ -369,7 +377,7 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
         })}
       </ul>
 
-      <Upsell issueCount={data.issueCount} />
+      <Upsell issueCount={data.issueCount} appStoreUrl={appStoreUrl} />
     </div>
   );
 }
@@ -377,14 +385,28 @@ function TeaserResult({ data }: { data: TeaserResponse }) {
 // Adaptive upsell below the teasers. When several problems remain, a blurred
 // locked block creates the urge to unlock. When the store is already in good
 // shape, drop the anxiety-inducing blur for a reassuring block instead.
-function Upsell({ issueCount }: { issueCount: number }) {
-  if (issueCount >= 3) return <LockedPaywall remaining={issueCount - 2} />;
-  return <PositiveUpsell issueCount={issueCount} />;
+function Upsell({
+  issueCount,
+  appStoreUrl,
+}: {
+  issueCount: number;
+  appStoreUrl: string;
+}) {
+  if (issueCount >= 3) {
+    return <LockedPaywall remaining={issueCount - 2} appStoreUrl={appStoreUrl} />;
+  }
+  return <PositiveUpsell issueCount={issueCount} appStoreUrl={appStoreUrl} />;
 }
 
 // Blurred, unreadable stack signalling there is more (the remaining issues and
 // the detailed fixes), topped by the upgrade CTA.
-function LockedPaywall({ remaining }: { remaining: number }) {
+function LockedPaywall({
+  remaining,
+  appStoreUrl,
+}: {
+  remaining: number;
+  appStoreUrl: string;
+}) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-line-strong">
       {/* Blurred, non-interactive teaser of the locked content */}
@@ -432,12 +454,12 @@ function LockedPaywall({ remaining }: { remaining: number }) {
           Debloque le rapport complet, les correctifs prets a appliquer et le
           suivi de conformite.
         </p>
-        <Link
-          href="/pricing"
+        <a
+          href={appStoreUrl}
           className="inline-flex mt-6 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
         >
-          Voir le rapport complet et corriger &rarr; Tarifs
-        </Link>
+          Installer Feedcompliant &rarr; Shopify App Store
+        </a>
       </div>
     </div>
   );
@@ -445,7 +467,13 @@ function LockedPaywall({ remaining }: { remaining: number }) {
 
 // Reassuring block for a store already in good shape (<= 2 problems). No blur:
 // the message is that a full audit covers the surfaces the teaser cannot see.
-function PositiveUpsell({ issueCount }: { issueCount: number }) {
+function PositiveUpsell({
+  issueCount,
+  appStoreUrl,
+}: {
+  issueCount: number;
+  appStoreUrl: string;
+}) {
   const body =
     issueCount === 0
       ? "Aucun probleme detecte sur les pages publiques. Un audit complet verifie aussi tes donnees produit et ton statut Merchant Center."
@@ -461,12 +489,12 @@ function PositiveUpsell({ issueCount }: { issueCount: number }) {
         Ta boutique est deja solide
       </h3>
       <p className="mt-3 text-muted max-w-xl leading-relaxed">{body}</p>
-      <Link
-        href="/pricing"
+      <a
+        href={appStoreUrl}
         className="inline-flex mt-6 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
       >
-        Obtenir l&apos;audit complet &rarr; Tarifs
-      </Link>
+        Installer Feedcompliant &rarr; Shopify App Store
+      </a>
     </div>
   );
 }

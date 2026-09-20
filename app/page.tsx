@@ -1,4 +1,5 @@
 import LandingPage from "../src/LandingPage";
+import { getShopifyAppStoreUrl } from "../lib/shopify";
 
 export const runtime = "nodejs";
 
@@ -8,5 +9,5 @@ export const runtime = "nodejs";
 // means either a normal visitor, or a shop whose connection is already
 // valid - both get the landing page.
 export default function Home() {
-  return <LandingPage />;
+  return <LandingPage appStoreUrl={getShopifyAppStoreUrl()} />;
 }

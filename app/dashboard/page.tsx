@@ -6,7 +6,7 @@ import { getShopsForUser } from "../../lib/db";
 import { PENDING_SHOP_COOKIE } from "../../lib/pendingShopClaim";
 import { getAuditsForUser, type AuditRow } from "../../lib/audits";
 import { getMerchantSelectionForUser } from "../../lib/googleStore";
-import ConnectShopify from "./ConnectShopify";
+import { getShopifyAppStoreUrl } from "../../lib/shopify";
 import MerchantAccountPicker from "./MerchantAccountPicker";
 import ShopBilling from "./ShopBilling";
 
@@ -57,6 +57,30 @@ export default async function DashboardPage({
   const email = user?.primaryEmailAddress?.emailAddress ?? "inconnu";
 
   const shops = userId ? await getShopsForUser(userId) : [];
+
+  if (shops.length === 0) {
+    return (
+      <main className="mx-auto w-full max-w-3xl flex-1 p-6">
+        <p className="tech-label text-muted">Connecté : {email}</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">
+          Tableau de bord
+        </h1>
+        <div className="mt-8 rounded-2xl border border-line bg-ink-soft p-6">
+          <p className="text-ink leading-relaxed">
+            Installez Feedcompliant depuis le Shopify App Store pour connecter
+            votre boutique.
+          </p>
+          <a
+            href={getShopifyAppStoreUrl()}
+            className="mt-6 inline-flex bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
+          >
+            Installer depuis le Shopify App Store
+          </a>
+        </div>
+      </main>
+    );
+  }
+
   const audits: AuditRow[] = userId ? await getAuditsForUser(userId) : [];
   const merchant = userId ? await getMerchantSelectionForUser(userId) : null;
   const params = await searchParams;
@@ -85,12 +109,6 @@ export default async function DashboardPage({
       )}
 
       <div className="mt-6 flex flex-col gap-4">
-        <div>
-          <p className="tech-label text-faint">Connecter une boutique Shopify</p>
-          <div className="mt-2">
-            <ConnectShopify />
-          </div>
-        </div>
         <div>
           <Link
             href="/api/google/auth"
@@ -126,35 +144,29 @@ export default async function DashboardPage({
 
       <section className="mt-8">
         <h2 className="tech-label text-brand">Boutiques connectées</h2>
-        {shops.length === 0 ? (
-          <p className="mt-2 text-muted">
-            Aucune boutique connectée pour l&apos;instant.
-          </p>
-        ) : (
-          <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-ink-soft">
-            {shops.map((s) => (
-              <li key={s.shop} className="px-4 py-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-ink">{s.shop}</p>
-                    <p className="tech-label text-faint">
-                      Mise à jour {formatDate(s.updated_at)}
-                    </p>
-                  </div>
-                  <a
-                    href={`/report?shop=${encodeURIComponent(s.shop.trim())}`}
-                    className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white"
-                  >
-                    Auditer
-                  </a>
+        <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-ink-soft">
+          {shops.map((s) => (
+            <li key={s.shop} className="px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium text-ink">{s.shop}</p>
+                  <p className="tech-label text-faint">
+                    Mise à jour {formatDate(s.updated_at)}
+                  </p>
                 </div>
-                <div className="mt-3">
-                  <ShopBilling shop={s.shop.trim()} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                <a
+                  href={`/report?shop=${encodeURIComponent(s.shop.trim())}`}
+                  className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white"
+                >
+                  Auditer
+                </a>
+              </div>
+              <div className="mt-3">
+                <ShopBilling shop={s.shop.trim()} />
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="mt-8">

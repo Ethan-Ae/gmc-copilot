@@ -33,6 +33,17 @@ export function isValidShop(shop: string): boolean {
   return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop);
 }
 
+// Shopify App Store listing URL. Manual shop-domain entry is not allowed
+// anywhere in the app (App Review 2.3.2): every "connect your store" surface
+// points here instead, and installation itself drives the OAuth flow.
+export function getShopifyAppStoreUrl(): string {
+  const url = process.env.SHOPIFY_APP_STORE_URL;
+  if (!url) {
+    throw new Error("Missing Shopify env var: SHOPIFY_APP_STORE_URL");
+  }
+  return url;
+}
+
 // Used to validate the optional "returnTo" carried through the OAuth state
 // (see app/api/shopify/auth and app/api/shopify/callback): only a same-app
 // relative path is ever accepted, so a forged value can never turn the OAuth
