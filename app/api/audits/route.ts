@@ -82,10 +82,10 @@ export async function POST(req: NextRequest) {
     token = await getShopifyAccessToken(shop);
   } catch (err) {
     if (err instanceof ShopifyReauthRequired) {
-      return jsonResponse(
-        { error: "Shopify re-authorization required. Reconnect the app." },
-        { status: 401 },
-      );
+      // Same slug as /api/shopify/billing/start's ShopifyReauthRequired
+      // handling: a fixed code the client matches on, never a raw message
+      // shown to the merchant.
+      return jsonResponse({ error: "shopify_reauth_required" }, { status: 401 });
     }
     return jsonResponse(
       { error: "Could not obtain a Shopify access token." },

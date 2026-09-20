@@ -43,11 +43,15 @@ export async function GET(
   if (row.status === "failed") {
     // Never relay row.error_message (raw technical detail, kept in the DB
     // for debugging only): the client only ever sees the fixed, safe French
-    // message for the error's category.
+    // message for the error's category, plus the category code itself
+    // (one of AuditErrorCode) so it can special-case "shopify_auth" as a
+    // reconnect product state rather than a generic failure.
+    const code = row.error_code as AuditErrorCode | null;
     return jsonResponse({
       auditId: row.id,
       status: "failed",
-      error: auditErrorMessage(row.error_code as AuditErrorCode | null),
+      code,
+      error: auditErrorMessage(code),
     });
   }
 

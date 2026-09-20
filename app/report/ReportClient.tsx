@@ -82,6 +82,8 @@ type State =
   | { status: "loading"; progressStep: string | null }
   | { status: "ok"; data: AuditResponse }
   | { status: "not-connected" }
+  | { status: "quota-reached" }
+  | { status: "reauth-required" }
   | { status: "error"; message: string }
   | { status: "timeout" };
 
@@ -195,6 +197,19 @@ function ReportInner({ appStoreUrl }: { appStoreUrl: string }) {
       }
       const body = await res.json().catch(() => null);
       if (!res.ok || !body?.auditId) {
+        // audit_limit_reached (quota) and shopify_reauth_required (dead
+        // Shopify token) are normal product states, not audit failures: they
+        // get their own view with the right call to action instead of the
+        // generic ErrorView, and their raw slug is never shown to the
+        // merchant.
+        if (res.status === 402 && body?.error === "audit_limit_reached") {
+          if (runId.current === myRun) setState({ status: "quota-reached" });
+          return;
+        }
+        if (res.status === 401 && body?.error === "shopify_reauth_required") {
+          if (runId.current === myRun) setState({ status: "reauth-required" });
+          return;
+        }
         const message =
           (body && (body.detail || body.error)) ||
           `L'audit a échoué (code ${res.status}).`;
@@ -242,6 +257,13 @@ function ReportInner({ appStoreUrl }: { appStoreUrl: string }) {
         }
 
         if (body.status === "failed") {
+          // A mid-run Shopify token failure (dead/revoked token) is the same
+          // reconnect product state as the preflight check above, not a
+          // generic analysis failure - see lib/auditErrors.ts's AuditErrorCode.
+          if (body.code === "shopify_auth") {
+            setState({ status: "reauth-required" });
+            return;
+          }
           setState({
             status: "error",
             message: body.error || "L'analyse a échoué.",
@@ -285,6 +307,12 @@ function ReportInner({ appStoreUrl }: { appStoreUrl: string }) {
         )}
         {shop && state.status === "not-connected" && (
           <NotConnectedView shop={shop} appStoreUrl={appStoreUrl} />
+        )}
+        {shop && state.status === "quota-reached" && (
+          <QuotaReachedView shop={shop} />
+        )}
+        {shop && state.status === "reauth-required" && (
+          <ReauthRequiredView appStoreUrl={appStoreUrl} />
         )}
         {shop && state.status === "error" && (
           <ErrorView message={state.message} onRetry={retry} />
@@ -353,6 +381,89 @@ function NotConnectedView({
       >
         Reinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
         cette boutique.
+      </a>
+    </section>
+  );
+}
+
+// Shown when POST /api/audits returns audit_limit_reached (402): the free
+// monthly quota is exhausted. This is a normal product state, not a failure -
+// no "Reessayer" button (retrying does nothing until the merchant unlocks
+// full access), and the raw "audit_limit_reached" slug is never rendered.
+// The unlock button runs the exact same purchase flow as the dashboard's
+// "Debloquer" button (see app/dashboard/ShopBilling.tsx's start()).
+function QuotaReachedView({ shop }: { shop: string }) {
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const unlock = async () => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/shopify/billing/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shop, type: "one_time" }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok && body?.confirmationUrl) {
+        window.location.href = body.confirmationUrl as string;
+        return;
+      }
+      setActionError("La creation du paiement a echoue. Reessayez.");
+    } catch {
+      setActionError("Le serveur est injoignable.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <section className="rise max-w-lg mx-auto py-10">
+      <p className="tech-label text-warn mb-4">Quota atteint</p>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        Limite d&apos;audits gratuits atteinte
+      </h1>
+      <p className="mt-3 text-muted leading-relaxed">
+        Debloquez la mise en conformite pour auditer cette boutique et
+        appliquer les correctifs.
+      </p>
+      <button
+        type="button"
+        onClick={unlock}
+        disabled={busy}
+        className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors disabled:opacity-60"
+      >
+        {busy ? "Redirection..." : "Debloquer - 149 CHF via Shopify"}
+      </button>
+      {actionError && <p className="mt-3 text-sm text-nogo">{actionError}</p>}
+    </section>
+  );
+}
+
+// Shown when the Shopify token is dead/revoked, either caught before the
+// audit starts (POST /api/audits -> shopify_reauth_required) or mid-run (GET
+// /api/audits/[id] -> status "failed", code "shopify_auth"). Per App Review
+// 2.3.2, /api/shopify/auth only starts OAuth for a shop already validated by
+// a real signed Shopify launch (see the hardened HMAC gate in
+// app/api/shopify/auth/route.ts) - reconnecting can no longer be a link
+// within the app, only a fresh install from the Shopify App Store. No
+// "Reessayer" button: retrying against a dead token fails the same way again.
+function ReauthRequiredView({ appStoreUrl }: { appStoreUrl: string }) {
+  return (
+    <section className="rise max-w-lg mx-auto py-10">
+      <p className="tech-label text-warn mb-4">Reconnexion necessaire</p>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        La connexion a votre boutique a expire.
+      </h1>
+      <p className="mt-3 text-muted leading-relaxed">
+        Reinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
+        cette boutique et relancer l&apos;audit.
+      </p>
+      <a
+        href={appStoreUrl}
+        className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
+      >
+        Reinstaller depuis le Shopify App Store
       </a>
     </section>
   );
