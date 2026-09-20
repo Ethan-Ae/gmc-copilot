@@ -35,6 +35,20 @@ function throwOnUserErrors(context: string, errors: UserError[]): void {
   }
 }
 
+// Shopify Partner development stores (and Shopify Plus sandbox stores) report
+// plan.partnerDevelopment = true. Charges against them must use test: true
+// exactly like the manual BILLING_TEST_SHOPS allowlist, or Shopify's App
+// Review test installs on a dev store would otherwise attempt a real charge.
+export async function isPartnerDevelopmentShop(
+  shop: string,
+  token: string,
+): Promise<boolean> {
+  const data = await shopifyGraphQL<{
+    shop: { plan: { partnerDevelopment: boolean } };
+  }>(shop, token, `{ shop { plan { partnerDevelopment } } }`, {});
+  return data.shop?.plan?.partnerDevelopment === true;
+}
+
 // (a) One-time 149 CHF "Mise en conformite" charge. Stores the charge id as
 // pending and returns the confirmationUrl the merchant must visit to accept.
 export async function createOneTimeCharge(

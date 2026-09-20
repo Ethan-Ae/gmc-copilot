@@ -2,19 +2,41 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../lib/apiJson";
-import { getEnv, isSafeReturnPath, isValidShop } from "../../../../lib/shopify";
+import {
+  getEnv,
+  isHmacTimestampFresh,
+  isSafeReturnPath,
+  isValidShop,
+  verifyHmac,
+} from "../../../../lib/shopify";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const { apiKey, scopes, appUrl } = getEnv();
+  const { apiKey, apiSecret, scopes, appUrl } = getEnv();
+  const params = req.nextUrl.searchParams;
 
-  const shop = req.nextUrl.searchParams.get("shop")?.trim().toLowerCase();
+  const shop = params.get("shop")?.trim().toLowerCase();
   if (!shop || !isValidShop(shop)) {
     return jsonResponse(
       { error: "Invalid shop. Use the format your-store.myshopify.com" },
       { status: 400 },
     );
+  }
+
+  // Per App Review 2.3.2, only a shop already validated by a real signed
+  // Shopify launch may start OAuth - never an arbitrary request choosing its
+  // own shop. This path is excluded from the install gate (see
+  // shopifyInstallGate.ts's EXCLUDED_PATH_PREFIXES, to avoid a redirect
+  // loop), so it re-verifies the same hmac the gate forwards here itself.
+  // No valid signature: bounce to the dashboard instead of ever calling
+  // Shopify's authorize endpoint.
+  if (
+    !params.get("hmac") ||
+    !verifyHmac(params, apiSecret) ||
+    !isHmacTimestampFresh(params)
+  ) {
+    return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
   }
 
   // No sign-in gate here: Shopify requires its authorization screen to be the

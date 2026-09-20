@@ -7,7 +7,10 @@ import {
   getShopifyAccessToken,
   ShopifyReauthRequired,
 } from "../../../../../lib/shopifyToken";
-import { createOneTimeCharge } from "../../../../../lib/shopifyBilling";
+import {
+  createOneTimeCharge,
+  isPartnerDevelopmentShop,
+} from "../../../../../lib/shopifyBilling";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -64,7 +67,9 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "shopify_token_error" }, { status: 502 });
   }
 
-  const test = isTestShop(shop);
+  // A dev/sandbox store reports plan.partnerDevelopment = true regardless of
+  // the BILLING_TEST_SHOPS allowlist - always charge it in test mode too.
+  const test = isTestShop(shop) || (await isPartnerDevelopmentShop(shop, token));
 
   try {
     const { confirmationUrl } = await createOneTimeCharge(shop, token, {

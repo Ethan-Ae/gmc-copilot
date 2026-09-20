@@ -80,7 +80,12 @@ export async function resolveInboundShopifyRequest(
 
   const embedded = params.get("embedded") === "1";
   const authorizeUrl = new URL("/api/shopify/auth", req.nextUrl.origin);
-  authorizeUrl.searchParams.set("shop", shop);
+  // Forward every param exactly as Shopify sent it (shop, hmac, timestamp,
+  // host, ...), unmodified, so /api/shopify/auth can re-verify the same HMAC
+  // itself: that route excludes this path from the gate (see
+  // EXCLUDED_PATH_PREFIXES) and must not start OAuth for a shop it has not
+  // independently confirmed came from a real signed Shopify launch.
+  params.forEach((value, key) => authorizeUrl.searchParams.set(key, value));
 
   const token = await deps.getShopToken(shop);
   if (!token || !(await deps.isTokenValid(shop, token))) {
