@@ -77,9 +77,10 @@ export async function POST(req: NextRequest) {
     });
     return jsonResponse({ confirmationUrl });
   } catch (err) {
-    return jsonResponse(
-      { error: "billing_create_failed", detail: String(err) },
-      { status: 502 },
-    );
+    // Log the raw detail server-side only; clients (ShopBilling.tsx,
+    // UnlockButton in app/report/ReportClient.tsx) never read this response's
+    // body on failure - they always show a fixed French sentence.
+    console.error(`[billing:start] shop=${shop}`, err);
+    return jsonResponse({ error: "billing_create_failed" }, { status: 502 });
   }
 }

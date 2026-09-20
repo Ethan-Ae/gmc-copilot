@@ -210,9 +210,9 @@ function ReportInner({ appStoreUrl }: { appStoreUrl: string }) {
           if (runId.current === myRun) setState({ status: "reauth-required" });
           return;
         }
-        const message =
-          (body && (body.detail || body.error)) ||
-          `L'audit a échoué (code ${res.status}).`;
+        // Any other failure (auth/ownership/edge cases): never render
+        // body.detail/body.error verbatim, just the status code.
+        const message = `L'audit a échoué (code ${res.status}).`;
         if (runId.current === myRun) setState({ status: "error", message });
         return;
       }
@@ -244,10 +244,9 @@ function ReportInner({ appStoreUrl }: { appStoreUrl: string }) {
         const body = await res.json().catch(() => null);
 
         if (!res.ok) {
-          const message =
-            (body && (body.detail || body.error)) ||
-            `L'audit a échoué (code ${res.status}).`;
-          setState({ status: "error", message });
+          // Never render body.detail/body.error verbatim (e.g. "not_found" if
+          // the row becomes inaccessible mid-poll), just the status code.
+          setState({ status: "error", message: `L'audit a échoué (code ${res.status}).` });
           return;
         }
 
@@ -386,13 +385,22 @@ function NotConnectedView({
   );
 }
 
-// Shown when POST /api/audits returns audit_limit_reached (402): the free
-// monthly quota is exhausted. This is a normal product state, not a failure -
-// no "Reessayer" button (retrying does nothing until the merchant unlocks
-// full access), and the raw "audit_limit_reached" slug is never rendered.
-// The unlock button runs the exact same purchase flow as the dashboard's
-// "Debloquer" button (see app/dashboard/ShopBilling.tsx's start()).
-function QuotaReachedView({ shop }: { shop: string }) {
+// Shared purchase-flow trigger: runs the exact same Shopify Billing charge as
+// the dashboard's "Debloquer"/"Relancer" button (see
+// app/dashboard/ShopBilling.tsx's start()). Reused everywhere the app needs
+// to turn an entitlement gap (quota reached, access expired) into a purchase
+// CTA, so the mechanic - and its failure wording - only lives in one place.
+function UnlockButton({
+  shop,
+  label,
+  redirectingLabel = "Redirection...",
+  className,
+}: {
+  shop: string;
+  label: string;
+  redirectingLabel?: string;
+  className: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -410,6 +418,9 @@ function QuotaReachedView({ shop }: { shop: string }) {
         window.location.href = body.confirmationUrl as string;
         return;
       }
+      // Deliberately never rendered from body.error/body.detail: whatever the
+      // billing route failed with, the merchant only ever sees this fixed
+      // sentence.
       setActionError("La creation du paiement a echoue. Reessayez.");
     } catch {
       setActionError("Le serveur est injoignable.");
@@ -417,6 +428,21 @@ function QuotaReachedView({ shop }: { shop: string }) {
     setBusy(false);
   };
 
+  return (
+    <>
+      <button type="button" onClick={unlock} disabled={busy} className={className}>
+        {busy ? redirectingLabel : label}
+      </button>
+      {actionError && <p className="mt-3 text-sm text-nogo">{actionError}</p>}
+    </>
+  );
+}
+
+// Shown when POST /api/audits returns audit_limit_reached (402): the free
+// monthly quota is exhausted. This is a normal product state, not a failure -
+// no "Reessayer" button (retrying does nothing until the merchant unlocks
+// full access), and the raw "audit_limit_reached" slug is never rendered.
+function QuotaReachedView({ shop }: { shop: string }) {
   return (
     <section className="rise max-w-lg mx-auto py-10">
       <p className="tech-label text-warn mb-4">Quota atteint</p>
@@ -427,15 +453,13 @@ function QuotaReachedView({ shop }: { shop: string }) {
         Debloquez la mise en conformite pour auditer cette boutique et
         appliquer les correctifs.
       </p>
-      <button
-        type="button"
-        onClick={unlock}
-        disabled={busy}
-        className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors disabled:opacity-60"
-      >
-        {busy ? "Redirection..." : "Debloquer - 149 CHF via Shopify"}
-      </button>
-      {actionError && <p className="mt-3 text-sm text-nogo">{actionError}</p>}
+      <div className="mt-8">
+        <UnlockButton
+          shop={shop}
+          label="Debloquer - 149 CHF via Shopify"
+          className="inline-flex bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors disabled:opacity-60"
+        />
+      </div>
     </section>
   );
 }
@@ -683,10 +707,17 @@ function FixAllActions({
     applied: number;
     skipped: { patch: FixPatch; reason: string }[];
   } | null>(null);
+  // Same product state as acces_expire in FixActions: access can expire mid-
+  // batch (the entitlement check runs on every /api/fix call). Once hit, every
+  // remaining patch would fail identically, so the loop stops on first
+  // occurrence instead of accumulating N duplicate "access expired" reasons -
+  // the recap is replaced by a single unlock prompt.
+  const [accessExpired, setAccessExpired] = useState(false);
 
   const runAll = async () => {
     setRunning(true);
     setRecap(null);
+    setAccessExpired(false);
     let applied = 0;
     const skipped: { patch: FixPatch; reason: string }[] = [];
 
@@ -704,7 +735,7 @@ function FixAllActions({
         if (res.ok && body?.status === "applied" && body?.multi) {
           applied += body.appliedCount ?? 0;
           for (const s of (body.skipped ?? []) as { reason: string }[]) {
-            skipped.push({ patch, reason: s.reason });
+            skipped.push({ patch, reason: fixReasonMessage(s.reason) });
           }
           continue;
         }
@@ -714,6 +745,12 @@ function FixAllActions({
           continue;
         }
 
+        if (body?.error === "acces_expire") {
+          setAccessExpired(true);
+          setRunning(false);
+          return;
+        }
+
         let reason: string;
         if (body?.status === "drift") {
           reason = "Modifie depuis l'audit - relancez un audit.";
@@ -721,9 +758,7 @@ function FixAllActions({
           reason =
             (body?.userErrors?.length &&
               body.userErrors.map((e: { message: string }) => e.message).join(" ")) ||
-            body?.message ||
-            body?.error ||
-            "Une erreur est survenue.";
+            fixErrorMessage(body);
         }
         skipped.push({ patch, reason });
       } catch {
@@ -734,6 +769,24 @@ function FixAllActions({
     setRecap({ applied, skipped });
     setRunning(false);
   };
+
+  if (accessExpired) {
+    return (
+      <div className="rounded-xl border border-warn/40 bg-warn-soft/50 p-3 max-w-xs">
+        <p className="text-sm text-ink">
+          Votre acces est expire. Relancez une mise en conformite pour
+          appliquer des correctifs.
+        </p>
+        <div className="mt-3">
+          <UnlockButton
+            shop={shop}
+            label="Debloquer - 149 CHF via Shopify"
+            className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white disabled:opacity-60"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-end gap-2">
@@ -891,6 +944,10 @@ type MultiAppliedResult = {
   skippedCount: number;
   skipped: { targetId: string; reason: string }[];
 };
+// Same product state as QuotaReachedView (acces_expire, 403), not a failure:
+// no error text, just the unlock CTA. Kept distinct from ErrorResult so the
+// raw slug is never funneled through the generic error-message fallback.
+type AccessExpiredResult = { kind: "access-expired" };
 type FixResult =
   | PreviewResult
   | AppliedResult
@@ -898,7 +955,41 @@ type FixResult =
   | ErrorResult
   | RevertedResult
   | MultiPreviewResult
-  | MultiAppliedResult;
+  | MultiAppliedResult
+  | AccessExpiredResult;
+
+// resolveTarget's ResolveError.error values (lib/shopifyFix.ts) are machine
+// slugs; the server also now attaches a matching "message" (see
+// lib/shopifyFix.ts's resolveErrorMessage), but this table is the client-side
+// safety net for any slug that ever arrives without one, so the fallback
+// below never renders the raw code.
+const FIX_ERROR_CODE_MESSAGE: Record<string, string> = {
+  shopify_reauth_required:
+    "La connexion a Shopify a expire. Reinstallez l'app depuis le Shopify App Store pour la retablir.",
+  shopify_token_error: "La connexion a Shopify a echoue. Reessayez.",
+  target_not_found: "Le produit ou l'element vise n'a pas ete trouve dans la boutique.",
+  invalid_field: "Ce champ n'est pas pris en charge pour ce correctif.",
+  missing_target_id: "La cible du correctif est introuvable.",
+  fix_type_not_applicable: "Ce correctif ne peut pas etre applique automatiquement.",
+  variant_ambiguous: "Plusieurs variantes correspondent - correction manuelle necessaire.",
+  missing_policy_type: "Le type de politique est manquant.",
+};
+
+// Never falls back to body.detail/body.error verbatim: a slug either has a
+// human message from the server, is translated via the table above, or gets
+// the generic sentence. Raw technical text can never reach this text node.
+function fixErrorMessage(body: unknown): string {
+  const errs = (body as { userErrors?: { message: string }[] } | null)?.userErrors;
+  if (errs?.length) return errs.map((e) => e.message).join(" ");
+  const b = body as { message?: string; error?: string } | null;
+  if (b?.message) return b.message;
+  if (b?.error && FIX_ERROR_CODE_MESSAGE[b.error]) return FIX_ERROR_CODE_MESSAGE[b.error];
+  return "Une erreur est survenue.";
+}
+
+function fixReasonMessage(reason: string): string {
+  return FIX_ERROR_CODE_MESSAGE[reason] ?? reason;
+}
 
 // True for the two fixTypes whose value is HTML (Shopify's rich text editor
 // output): a product's descriptionHtml, and any policy body (fixType "policy"
@@ -988,15 +1079,6 @@ function FixActions({
   const [busy, setBusy] = useState<null | "preview" | "apply" | "revert">(null);
   const [result, setResult] = useState<FixResult | null>(null);
 
-  const userErrorsText = (body: unknown): string => {
-    const errs = (body as { userErrors?: { message: string }[] })?.userErrors;
-    if (errs?.length) return errs.map((e) => e.message).join(" ");
-    // Prefer a human message (e.g. the 403 acces_expire payload) over the raw
-    // error slug, so a gated response reads cleanly instead of showing a code.
-    const b = body as { message?: string; detail?: string; error?: string };
-    return b?.message || b?.detail || b?.error || "Une erreur est survenue.";
-  };
-
   const preview = async () => {
     setBusy("preview");
     try {
@@ -1007,7 +1089,14 @@ function FixActions({
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
-        setResult({ kind: "error", message: userErrorsText(body) });
+        // Same product state as the free-audit quota: access expired mid-session
+        // (the audit response that gated FixLocked can be stale). Dedicated
+        // unlock CTA, never the raw "acces_expire" slug.
+        if (body?.error === "acces_expire") {
+          setResult({ kind: "access-expired" });
+          return;
+        }
+        setResult({ kind: "error", message: fixErrorMessage(body) });
         return;
       }
       if (body?.multi) {
@@ -1042,11 +1131,12 @@ function FixActions({
       });
       const body = await res.json().catch(() => null);
       if (res.ok && body?.status === "applied" && body?.multi) {
+        const skipped = (body.skipped ?? []) as { targetId: string; reason: string }[];
         setResult({
           kind: "multi-applied",
           appliedCount: body.appliedCount ?? 0,
           skippedCount: body.skippedCount ?? 0,
-          skipped: body.skipped ?? [],
+          skipped: skipped.map((s) => ({ ...s, reason: fixReasonMessage(s.reason) })),
         });
         return;
       }
@@ -1062,7 +1152,11 @@ function FixActions({
         setResult({ kind: "drift", currentLive: body.currentLive ?? null });
         return;
       }
-      setResult({ kind: "error", message: userErrorsText(body) });
+      if (body?.error === "acces_expire") {
+        setResult({ kind: "access-expired" });
+        return;
+      }
+      setResult({ kind: "error", message: fixErrorMessage(body) });
     } catch {
       setResult({ kind: "error", message: "Le serveur est injoignable." });
     } finally {
@@ -1087,7 +1181,11 @@ function FixActions({
         setResult({ kind: "drift", currentLive: body.currentLive ?? null });
         return;
       }
-      setResult({ kind: "error", message: userErrorsText(body) });
+      if (body?.error === "acces_expire") {
+        setResult({ kind: "access-expired" });
+        return;
+      }
+      setResult({ kind: "error", message: fixErrorMessage(body) });
     } catch {
       setResult({ kind: "error", message: "Le serveur est injoignable." });
     } finally {
@@ -1096,7 +1194,10 @@ function FixActions({
   };
 
   const applied = result?.kind === "applied" ? result : null;
-  const finished = result?.kind === "reverted" || result?.kind === "multi-applied";
+  const finished =
+    result?.kind === "reverted" ||
+    result?.kind === "multi-applied" ||
+    result?.kind === "access-expired";
 
   return (
     <div className="mt-4 border-t border-line pt-4">
@@ -1164,6 +1265,22 @@ function FixActions({
 
       {result?.kind === "error" && (
         <p className="mt-3 text-sm text-nogo">{result.message}</p>
+      )}
+
+      {result?.kind === "access-expired" && (
+        <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
+          <p className="text-sm text-ink">
+            Votre acces est expire. Relancez une mise en conformite pour
+            appliquer des correctifs.
+          </p>
+          <div className="mt-3">
+            <UnlockButton
+              shop={shop}
+              label="Debloquer - 149 CHF via Shopify"
+              className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white disabled:opacity-60"
+            />
+          </div>
+        </div>
       )}
 
       {result?.kind === "multi-preview" && (

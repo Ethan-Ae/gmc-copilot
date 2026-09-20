@@ -13,6 +13,7 @@ import { getAuditById, updateFieldSnapshot } from "../../../lib/audits";
 import {
   APPLICABLE_FIX_TYPES,
   norm,
+  resolveErrorMessage,
   resolveTarget,
   type Mode,
   type Patch,
@@ -40,6 +41,7 @@ function snapshotFieldFor(fixType: string, field: string | null | undefined): st
 function isGid(s: unknown): s is string {
   return typeof s === "string" && /^gid:\/\/shopify\/\w+\/\d+/.test(s);
 }
+
 
 export async function POST(req: NextRequest) {
   // (a) Clerk user.
@@ -93,7 +95,10 @@ export async function POST(req: NextRequest) {
   // (c) fixType allowlist. autoApplicable is deliberately ignored here.
   const fixType = patch.fixType ?? "";
   if (!APPLICABLE_FIX_TYPES.has(fixType)) {
-    return jsonResponse({ error: "fix_type_not_applicable" }, { status: 403 });
+    return jsonResponse(
+      { error: "fix_type_not_applicable", message: resolveErrorMessage("fix_type_not_applicable") },
+      { status: 403 },
+    );
   }
 
   let token: string;
@@ -151,7 +156,10 @@ export async function POST(req: NextRequest) {
       console.warn(
         `[fix:${target.error}] shop=${shop} fixType=${fixType} field=${JSON.stringify(patch.field ?? null)} targetId=${patch.targetId ?? "null"}`,
       );
-      return jsonResponse({ error: target.error }, { status: target.status });
+      return jsonResponse(
+        { error: target.error, message: resolveErrorMessage(target.error) },
+        { status: target.status },
+      );
     }
 
     const { currentLive } = target;
@@ -220,7 +228,13 @@ export async function POST(req: NextRequest) {
       drift: false,
     });
   } catch (err) {
-    return jsonResponse({ status: "error", detail: String(err) }, { status: 502 });
+    // Log the raw detail server-side only; the client never sees exception
+    // text, just a fixed French message (same convention as auditErrors.ts).
+    console.error(`[fix:single] shop=${shop}`, err);
+    return jsonResponse(
+      { status: "error", message: "Une erreur technique est survenue. Reessayez." },
+      { status: 502 },
+    );
   }
 }
 
@@ -270,12 +284,13 @@ async function handleMultiTarget(opts: {
     try {
       target = await resolveTarget(shop, token, "product_seo", targetPatch);
     } catch (err) {
-      skipped.push({ targetId, reason: String(err) });
+      console.error(`[fix:multi] shop=${shop} targetId=${targetId}`, err);
+      skipped.push({ targetId, reason: "Une erreur technique est survenue." });
       continue;
     }
     if ("error" in target) {
       console.warn(`[fix:multi:${target.error}] shop=${shop} targetId=${targetId}`);
-      skipped.push({ targetId, reason: target.error });
+      skipped.push({ targetId, reason: resolveErrorMessage(target.error) });
       continue;
     }
 

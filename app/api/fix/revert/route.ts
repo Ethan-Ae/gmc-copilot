@@ -7,7 +7,12 @@ import {
 } from "../../../../lib/shopifyToken";
 import { getFixById, markReverted } from "../../../../lib/fixHistory";
 import { getEntitlements } from "../../../../lib/entitlements";
-import { norm, resolveTarget, type Patch } from "../../../../lib/shopifyFix";
+import {
+  norm,
+  resolveErrorMessage,
+  resolveTarget,
+  type Patch,
+} from "../../../../lib/shopifyFix";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -81,7 +86,10 @@ export async function POST(req: NextRequest) {
   try {
     const target = await resolveTarget(fix.shop, token, fix.fix_type, patch);
     if ("error" in target) {
-      return jsonResponse({ error: target.error }, { status: target.status });
+      return jsonResponse(
+        { error: target.error, message: resolveErrorMessage(target.error) },
+        { status: target.status },
+      );
     }
 
     // Anti-drift: the live value must still be what we wrote. Otherwise the
@@ -108,6 +116,12 @@ export async function POST(req: NextRequest) {
       restoredValue: fix.previous_value,
     });
   } catch (err) {
-    return jsonResponse({ status: "error", detail: String(err) }, { status: 502 });
+    // Log the raw detail server-side only; the client never sees exception
+    // text, just a fixed French message (same convention as auditErrors.ts).
+    console.error(`[fix:revert] fixHistoryId=${id}`, err);
+    return jsonResponse(
+      { status: "error", message: "Une erreur technique est survenue. Reessayez." },
+      { status: 502 },
+    );
   }
 }

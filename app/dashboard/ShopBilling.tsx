@@ -62,9 +62,10 @@ export default function ShopBilling({ shop }: { shop: string }) {
         window.location.href = body.confirmationUrl as string;
         return;
       }
-      setActionError(
-        body?.detail || body?.error || "La creation du paiement a echoue.",
-      );
+      // Deliberately never rendered from body.detail/body.error: whatever the
+      // billing route failed with, the merchant only ever sees this fixed
+      // sentence (same convention as UnlockButton in app/report/ReportClient.tsx).
+      setActionError("La creation du paiement a echoue. Reessayez.");
     } catch {
       setActionError("Le serveur est injoignable.");
     }

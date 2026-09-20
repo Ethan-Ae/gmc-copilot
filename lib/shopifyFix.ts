@@ -49,6 +49,22 @@ export type Target = {
 
 export type ResolveError = { error: string; status: number };
 
+// ResolveError.error values are machine slugs with no message field. Both
+// /api/fix and /api/fix/revert attach a human message via this table so a
+// merchant-facing response never falls back to the raw slug.
+const RESOLVE_ERROR_MESSAGE: Record<string, string> = {
+  target_not_found: "Le produit ou l'element vise n'a pas ete trouve dans la boutique.",
+  invalid_field: "Ce champ n'est pas pris en charge pour ce correctif.",
+  missing_target_id: "La cible du correctif est introuvable.",
+  fix_type_not_applicable: "Ce correctif ne peut pas etre applique automatiquement.",
+  variant_ambiguous: "Plusieurs variantes correspondent - correction manuelle necessaire.",
+  missing_policy_type: "Le type de politique est manquant.",
+};
+
+export function resolveErrorMessage(code: string): string {
+  return RESOLVE_ERROR_MESSAGE[code] ?? "Une erreur est survenue.";
+}
+
 // The second half of a field_snapshots key (see lib/auditEngine.ts's
 // fieldSnapshots) does not always equal the wire "field" the model sends: for
 // policy/partial the wire field is one of the policy type constants (matching
