@@ -48,41 +48,102 @@ function isExcludedPath(pathname: string): boolean {
 // must happen first, or null when the request either isn't a signed Shopify
 // launch, targets excluded app machinery, or is already backed by a valid
 // token - in all of those cases normal routing/rendering proceeds untouched.
+type GateDecision = "oauth" | "render" | "dashboard" | "excluded";
+
+type GateLogFields = {
+  path: string;
+  shop: string;
+  hasHmac: boolean;
+  hmacValid?: boolean;
+  timestampFresh?: boolean;
+  ageSeconds?: number;
+  hasToken?: boolean;
+  decision: GateDecision;
+};
+
+// Diagnostic only - never include the hmac, the api secret, or the access
+// token, only booleans/derived facts about them.
+function logGateDecision(fields: GateLogFields): void {
+  console.log("[install-gate]", fields);
+}
+
+function ageSecondsOf(params: URLSearchParams): number | undefined {
+  const raw = params.get("timestamp");
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds)) return undefined;
+  return Math.round(Date.now() / 1000 - seconds);
+}
+
 export async function resolveInboundShopifyRequest(
   req: NextRequest,
   deps: InstallGateDeps = defaultDeps,
 ): Promise<NextResponse | null> {
-  if (isExcludedPath(req.nextUrl.pathname)) return null;
-
+  const path = req.nextUrl.pathname;
   const params = req.nextUrl.searchParams;
-  const shop = params.get("shop")?.trim().toLowerCase();
-  if (!shop || !isValidShop(shop)) return null;
-  if (!params.get("hmac")) return null;
+  const rawShop = params.get("shop");
+
+  if (isExcludedPath(path)) {
+    if (rawShop !== null) {
+      logGateDecision({ path, shop: rawShop, hasHmac: params.has("hmac"), decision: "excluded" });
+    }
+    return null;
+  }
+
+  if (rawShop === null) return null;
+  const shop = rawShop.trim().toLowerCase();
+  const hasHmac = params.has("hmac");
+  const log = (decision: GateDecision, extra: Partial<GateLogFields> = {}) =>
+    logGateDecision({ path, shop, hasHmac, decision, ...extra });
+
+  if (!isValidShop(shop) || !hasHmac) {
+    log("render");
+    return null;
+  }
 
   let apiSecret: string;
   try {
     ({ apiSecret } = getEnv());
   } catch {
     // Shopify env not configured: never block normal routing over it.
+    log("render");
     return null;
   }
 
-  if (!verifyHmac(params, apiSecret)) return null;
+  const hmacValid = verifyHmac(params, apiSecret);
+  if (!hmacValid) {
+    log("render", { hmacValid });
+    return null;
+  }
+
   // Stale/replayed signed link: do not trust the shop claim enough to act on
   // it (neither to force OAuth nor to skip it) - fall through to normal
   // rendering, same as an unsigned request.
-  if (!isHmacTimestampFresh(params)) return null;
+  const timestampFresh = isHmacTimestampFresh(params);
+  const ageSeconds = ageSecondsOf(params);
+  if (!timestampFresh) {
+    log("render", { hmacValid, timestampFresh, ageSeconds });
+    return null;
+  }
 
   const embedded = params.get("embedded") === "1";
   const authorizeUrl = new URL("/api/shopify/auth", req.nextUrl.origin);
   authorizeUrl.searchParams.set("shop", shop);
 
   const token = await deps.getShopToken(shop);
+  const hasToken = Boolean(token);
   if (!token || !(await deps.isTokenValid(shop, token))) {
     if (token) await deps.deleteShopToken(shop);
+    log("oauth", { hmacValid, timestampFresh, ageSeconds, hasToken });
     return embedded ? iframeBreakout(authorizeUrl) : NextResponse.redirect(authorizeUrl);
   }
 
+  log(path.startsWith("/dashboard") ? "dashboard" : "render", {
+    hmacValid,
+    timestampFresh,
+    ageSeconds,
+    hasToken,
+  });
   return null;
 }
 
