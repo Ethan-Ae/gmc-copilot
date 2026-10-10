@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../../../lib/apiJson";
-import { isValidShop } from "../../../../../lib/shopify";
+import { isSafeReturnPath, isValidShop } from "../../../../../lib/shopify";
 import { getShopOwner } from "../../../../../lib/db";
 import {
   getShopifyAccessToken,
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     return jsonResponse({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { shop?: string; type?: string };
+  let body: { shop?: string; type?: string; returnPath?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -43,6 +43,11 @@ export async function POST(req: NextRequest) {
   if (!shop || !isValidShop(shop)) {
     return jsonResponse({ error: "invalid_shop" }, { status: 400 });
   }
+
+  // Where Shopify should return the merchant after the charge: defaults to
+  // the dashboard (see billing/return/route.ts) when absent or unsafe.
+  const returnPath =
+    body.returnPath && isSafeReturnPath(body.returnPath) ? body.returnPath : undefined;
 
   // Since the pricing pivot only the one-time 149 CHF charge is sold. The
   // monthly subscription path is retired (createSubscription stays in
@@ -69,11 +74,17 @@ export async function POST(req: NextRequest) {
 
   // A dev/sandbox store reports plan.partnerDevelopment = true regardless of
   // the BILLING_TEST_SHOPS allowlist - always charge it in test mode too.
-  const test = isTestShop(shop) || (await isPartnerDevelopmentShop(shop, token));
+  // SHOPIFY_BILLING_TEST=true is a blanket override for every shop (used
+  // during App Review so a reviewer's charge never touches real money).
+  const test =
+    process.env.SHOPIFY_BILLING_TEST === "true" ||
+    isTestShop(shop) ||
+    (await isPartnerDevelopmentShop(shop, token));
 
   try {
     const { confirmationUrl } = await createOneTimeCharge(shop, token, {
       test,
+      returnPath,
     });
     return jsonResponse({ confirmationUrl });
   } catch (err) {

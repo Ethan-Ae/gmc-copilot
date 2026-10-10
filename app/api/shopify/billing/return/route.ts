@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isValidShop } from "../../../../../lib/shopify";
+import { isSafeReturnPath, isValidShop } from "../../../../../lib/shopify";
 import { getShopifyAccessToken } from "../../../../../lib/shopifyToken";
 import { syncBillingState } from "../../../../../lib/shopifyBilling";
 
@@ -22,7 +22,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const dashboardUrl = new URL("/dashboard", req.nextUrl.origin);
-  dashboardUrl.searchParams.set("billing", "done");
-  return NextResponse.redirect(dashboardUrl, { status: 303 });
+  const returnPath = req.nextUrl.searchParams.get("returnPath");
+  const path = returnPath && isSafeReturnPath(returnPath) ? returnPath : "/dashboard";
+  const destination = new URL(path, req.nextUrl.origin);
+  destination.searchParams.set("billing", "done");
+  return NextResponse.redirect(destination, { status: 303 });
 }

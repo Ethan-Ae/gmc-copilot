@@ -21,11 +21,18 @@ const SUBSCRIPTION_NAME = "Feedcompliant - Surveillance";
 const SUBSCRIPTION_AMOUNT = 29.0;
 const CURRENCY = "CHF";
 
-function returnUrl(shop: string, type: "one_time" | "subscription"): string {
+function returnUrl(
+  shop: string,
+  type: "one_time" | "subscription",
+  returnPath?: string,
+): string {
   const { appUrl } = getEnv();
   const url = new URL("/api/shopify/billing/return", appUrl);
   url.searchParams.set("shop", shop);
   url.searchParams.set("type", type);
+  if (returnPath) {
+    url.searchParams.set("returnPath", returnPath);
+  }
   return url.toString();
 }
 
@@ -54,7 +61,7 @@ export async function isPartnerDevelopmentShop(
 export async function createOneTimeCharge(
   shop: string,
   token: string,
-  opts: { test: boolean },
+  opts: { test: boolean; returnPath?: string },
 ): Promise<{ confirmationUrl: string }> {
   const data = await shopifyGraphQL<{
     appPurchaseOneTimeCreate: {
@@ -75,7 +82,7 @@ export async function createOneTimeCharge(
     {
       name: ONE_TIME_NAME,
       price: { amount: ONE_TIME_AMOUNT, currencyCode: CURRENCY },
-      returnUrl: returnUrl(shop, "one_time"),
+      returnUrl: returnUrl(shop, "one_time", opts.returnPath),
       test: opts.test,
     },
   );

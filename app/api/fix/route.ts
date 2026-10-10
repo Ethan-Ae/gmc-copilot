@@ -1,13 +1,14 @@
 import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { jsonResponse } from "../../../lib/apiJson";
-import { isValidShop } from "../../../lib/shopify";
+import { getShopifyAppStoreUrl, isValidShop } from "../../../lib/shopify";
 import { getShopOwner } from "../../../lib/db";
 import {
   getShopifyAccessToken,
   ShopifyReauthRequired,
 } from "../../../lib/shopifyToken";
-import { getEntitlements } from "../../../lib/entitlements";
+import { getEntitlements, oneTimeAccessExpired } from "../../../lib/entitlements";
+import { getBillingState } from "../../../lib/billingState";
 import { recordFix } from "../../../lib/fixHistory";
 import { getAuditById, updateFieldSnapshot } from "../../../lib/audits";
 import {
@@ -24,6 +25,19 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_MULTI_TARGETS = 50;
+
+// Same route UnlockButton already posts to (app/report/ReportClient.tsx) -
+// kept here as the single literal so a client never has to guess it.
+const BILLING_START_URL = "/api/shopify/billing/start";
+
+// A clicked "Appliquer" must never surface a raw 4xx/5xx to the merchant (App
+// Review 2.1.1 reviewer hit a blocking 403 on a no-purchase account). Every
+// product-state outcome below - unpaid, expired, dead token, or a genuine
+// write failure - is reported as a 200 with a status the client renders as a
+// banner or redirect, never as an HTTP error.
+function okJson(body: unknown) {
+  return jsonResponse(body);
+}
 
 // The second half of the field_snapshots key (see lib/auditEngine.ts's
 // fieldSnapshots) does not always equal the wire "field" the model sends: for
@@ -82,23 +96,27 @@ export async function POST(req: NextRequest) {
   // active full access. Audits keep their own free quota and are unaffected.
   const entitlements = await getEntitlements(userId, shop);
   if (!entitlements.canApplyFixes) {
-    return jsonResponse(
-      {
-        error: "acces_expire",
-        message:
-          "Votre acces est expire. Relancez une mise en conformite pour appliquer des correctifs.",
-      },
-      { status: 403 },
-    );
+    // Never paid vs. the 30-day window having lapsed get distinct wording so
+    // the merchant knows whether this is their first purchase or a renewal.
+    const billing = await getBillingState(shop);
+    const expired = oneTimeAccessExpired(billing);
+    return okJson({
+      status: "payment_required",
+      billingUrl: BILLING_START_URL,
+      message: expired
+        ? "Votre accès de 30 jours est terminé. Relancez une mise en conformité pour appliquer ce correctif."
+        : "Les corrections automatiques sont incluses dans la mise en conformité. Débloquez l'accès pour appliquer ce correctif.",
+    });
   }
 
   // (c) fixType allowlist. autoApplicable is deliberately ignored here.
   const fixType = patch.fixType ?? "";
   if (!APPLICABLE_FIX_TYPES.has(fixType)) {
-    return jsonResponse(
-      { error: "fix_type_not_applicable", message: resolveErrorMessage("fix_type_not_applicable") },
-      { status: 403 },
-    );
+    return okJson({
+      status: "failed",
+      code: "fix_type_not_applicable",
+      message: resolveErrorMessage("fix_type_not_applicable"),
+    });
   }
 
   let token: string;
@@ -106,9 +124,27 @@ export async function POST(req: NextRequest) {
     token = await getShopifyAccessToken(shop);
   } catch (err) {
     if (err instanceof ShopifyReauthRequired) {
-      return jsonResponse({ error: "shopify_reauth_required" }, { status: 401 });
+      console.warn(`[fix:shopify_reauth_required] shop=${shop}`);
+      let reauthUrl: string;
+      try {
+        reauthUrl = getShopifyAppStoreUrl();
+      } catch (envErr) {
+        console.error(`[fix:shopify_reauth_required] missing app store url`, envErr);
+        return okJson({
+          status: "failed",
+          code: "shopify_reauth_required",
+          message:
+            "La connexion à Shopify a expiré. Réinstallez l'app depuis le Shopify App Store pour la rétablir.",
+        });
+      }
+      return okJson({ status: "reauth_required", reauthUrl });
     }
-    return jsonResponse({ error: "shopify_token_error" }, { status: 502 });
+    console.error(`[fix:shopify_token_error] shop=${shop}`, err);
+    return okJson({
+      status: "failed",
+      code: "shopify_token_error",
+      message: "La connexion à Shopify a échoué. Réessayez.",
+    });
   }
 
   // Multi-product fix: the same literal phrase is removed/replaced across
@@ -156,10 +192,11 @@ export async function POST(req: NextRequest) {
       console.warn(
         `[fix:${target.error}] shop=${shop} fixType=${fixType} field=${JSON.stringify(patch.field ?? null)} targetId=${patch.targetId ?? "null"}`,
       );
-      return jsonResponse(
-        { error: target.error, message: resolveErrorMessage(target.error) },
-        { status: target.status },
-      );
+      return okJson({
+        status: "failed",
+        code: target.error,
+        message: resolveErrorMessage(target.error),
+      });
     }
 
     const { currentLive } = target;
@@ -197,7 +234,13 @@ export async function POST(req: NextRequest) {
     // apply, no drift: write, then historise so it can be reverted.
     const userErrors = await target.write(newValue);
     if (userErrors.length) {
-      return jsonResponse({ status: "error", userErrors }, { status: 502 });
+      console.warn(`[fix:write_failed] shop=${shop} fixType=${fixType}`, userErrors);
+      return okJson({
+        status: "failed",
+        code: "write_failed",
+        message:
+          "Shopify a refusé cette modification. Corrigez-la manuellement dans l'admin Shopify ou réessayez.",
+      });
     }
 
     // Keep the snapshot fresh so a second fix on the same field within the
@@ -231,10 +274,11 @@ export async function POST(req: NextRequest) {
     // Log the raw detail server-side only; the client never sees exception
     // text, just a fixed French message (same convention as auditErrors.ts).
     console.error(`[fix:single] shop=${shop}`, err);
-    return jsonResponse(
-      { status: "error", message: "Une erreur technique est survenue. Reessayez." },
-      { status: 502 },
-    );
+    return okJson({
+      status: "failed",
+      code: "internal_error",
+      message: "Une erreur technique est survenue. Réessayez.",
+    });
   }
 }
 
@@ -256,10 +300,18 @@ async function handleMultiTarget(opts: {
   const replaceText = patch.replaceText ?? "";
 
   if (targetIds.length === 0) {
-    return jsonResponse({ error: "missing_target_id" }, { status: 400 });
+    return okJson({
+      status: "failed",
+      code: "missing_target_id",
+      message: resolveErrorMessage("missing_target_id"),
+    });
   }
   if (!findText) {
-    return jsonResponse({ error: "missing_find_text" }, { status: 400 });
+    return okJson({
+      status: "failed",
+      code: "missing_find_text",
+      message: "Le texte à remplacer est manquant.",
+    });
   }
 
   const auditRow = auditId ? await getAuditById(auditId, userId).catch(() => null) : null;

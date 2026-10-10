@@ -394,11 +394,19 @@ function UnlockButton({
   shop,
   label,
   redirectingLabel = "Redirection...",
+  billingUrl = "/api/shopify/billing/start",
+  returnPath,
   className,
 }: {
   shop: string;
   label: string;
   redirectingLabel?: string;
+  billingUrl?: string;
+  // Where Shopify sends the merchant back after accepting/declining the
+  // charge (see app/api/shopify/billing/return/route.ts). Defaults to the
+  // dashboard when omitted; the report page passes its own URL so "Appliquer"
+  // is immediately usable on return instead of landing on the dashboard.
+  returnPath?: string;
   className: string;
 }) {
   const [busy, setBusy] = useState(false);
@@ -408,10 +416,10 @@ function UnlockButton({
     setBusy(true);
     setActionError(null);
     try {
-      const res = await fetch("/api/shopify/billing/start", {
+      const res = await fetch(billingUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop, type: "one_time" }),
+        body: JSON.stringify({ shop, type: "one_time", returnPath }),
       });
       const body = await res.json().catch(() => null);
       if (res.ok && body?.confirmationUrl) {
@@ -707,17 +715,18 @@ function FixAllActions({
     applied: number;
     skipped: { patch: FixPatch; reason: string }[];
   } | null>(null);
-  // Same product state as acces_expire in FixActions: access can expire mid-
-  // batch (the entitlement check runs on every /api/fix call). Once hit, every
-  // remaining patch would fail identically, so the loop stops on first
-  // occurrence instead of accumulating N duplicate "access expired" reasons -
-  // the recap is replaced by a single unlock prompt.
-  const [accessExpired, setAccessExpired] = useState(false);
+  // payment_required/reauth_required apply identically to every remaining
+  // patch (entitlement/token are checked once per shop, not per patch), so
+  // the loop stops on first occurrence instead of accumulating N duplicate
+  // reasons - the recap is replaced by the one CTA that actually unblocks it.
+  const [blocked, setBlocked] = useState<PaymentRequiredResult | ReauthRequiredResult | null>(
+    null,
+  );
 
   const runAll = async () => {
     setRunning(true);
     setRecap(null);
-    setAccessExpired(false);
+    setBlocked(null);
     let applied = 0;
     const skipped: { patch: FixPatch; reason: string }[] = [];
 
@@ -745,8 +754,9 @@ function FixAllActions({
           continue;
         }
 
-        if (body?.error === "acces_expire") {
-          setAccessExpired(true);
+        const shared = sharedFixOutcome(res, body);
+        if (shared?.kind === "payment-required" || shared?.kind === "reauth-required") {
+          setBlocked(shared);
           setRunning(false);
           return;
         }
@@ -754,6 +764,8 @@ function FixAllActions({
         let reason: string;
         if (body?.status === "drift") {
           reason = "Modifie depuis l'audit - relancez un audit.";
+        } else if (shared?.kind === "failed") {
+          reason = shared.message;
         } else {
           reason =
             (body?.userErrors?.length &&
@@ -770,20 +782,36 @@ function FixAllActions({
     setRunning(false);
   };
 
-  if (accessExpired) {
+  if (blocked?.kind === "payment-required") {
     return (
       <div className="rounded-xl border border-warn/40 bg-warn-soft/50 p-3 max-w-xs">
-        <p className="text-sm text-ink">
-          Votre acces est expire. Relancez une mise en conformite pour
-          appliquer des correctifs.
-        </p>
+        <p className="text-sm text-ink">{blocked.message}</p>
         <div className="mt-3">
           <UnlockButton
             shop={shop}
-            label="Debloquer - 149 CHF via Shopify"
+            billingUrl={blocked.billingUrl}
+            returnPath={`/report?shop=${encodeURIComponent(shop)}`}
+            label="Débloquer les corrections"
             className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white disabled:opacity-60"
           />
         </div>
+      </div>
+    );
+  }
+
+  if (blocked?.kind === "reauth-required") {
+    return (
+      <div className="rounded-xl border border-warn/40 bg-warn-soft/50 p-3 max-w-xs">
+        <p className="text-sm text-ink">
+          La connexion à Shopify a expiré. Réinstallez l&apos;app pour
+          reconnecter cette boutique.
+        </p>
+        <a
+          href={blocked.reauthUrl}
+          className="tech-label mt-3 inline-block rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white"
+        >
+          Se reconnecter via le Shopify App Store
+        </a>
       </div>
     );
   }
@@ -861,7 +889,7 @@ function IssueCard({
         canApplyFixes ? (
           <FixActions shop={shop} auditId={auditId} patch={issue.patch} />
         ) : (
-          <FixLocked />
+          <FixLocked shop={shop} />
         )
       ) : (
         <ManualFix />
@@ -883,43 +911,28 @@ function ManualFix() {
   );
 }
 
-// Shown when the audited shop has no full access (never unlocked, or the 30-day
-// window has elapsed). The report itself stays fully visible; only the write
-// workflow is gated. The Previsualiser/Appliquer buttons are rendered disabled
-// beside the same expired-access banner the dashboard uses. The /api/fix route
-// enforces this server-side regardless of what the UI renders.
-function FixLocked() {
+// Shown when the audited shop has no full access (never unlocked, or the
+// 30-day window has elapsed). The report itself stays fully visible; only the
+// write workflow is gated. No disabled dead-end buttons: a direct unlock CTA
+// replaces "Appliquer" (the same /api/fix call would refuse with
+// "payment_required" anyway, so there is nothing a Previsualiser/Appliquer
+// click could do here).
+function FixLocked({ shop }: { shop: string }) {
   return (
     <div className="mt-4 border-t border-line pt-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          className="border border-line-strong text-ink font-medium rounded-full px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
-        >
-          Previsualiser
-        </button>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          className="bg-ink text-paper font-medium rounded-full px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
-        >
-          Appliquer
-        </button>
-      </div>
-      <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
+      <div className="rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
         <p className="text-sm text-ink">
-          Votre acces est expire. Relancez une mise en conformite pour appliquer
-          des correctifs.
+          Les corrections automatiques sont incluses dans la mise en
+          conformite. Debloquez l&apos;acces pour appliquer ce correctif.
         </p>
-        <Link
-          href="/dashboard"
-          className="tech-label mt-3 inline-block rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white"
-        >
-          Relancer la mise en conformite
-        </Link>
+        <div className="mt-3">
+          <UnlockButton
+            shop={shop}
+            returnPath={`/report?shop=${encodeURIComponent(shop)}`}
+            label="Débloquer les corrections"
+            className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white disabled:opacity-60"
+          />
+        </div>
       </div>
     </div>
   );
@@ -935,7 +948,6 @@ type PreviewResult = {
 };
 type AppliedResult = { kind: "applied"; fixId: string; newValue: string };
 type DriftResult = { kind: "drift"; currentLive: string | null };
-type ErrorResult = { kind: "error"; message: string };
 type RevertedResult = { kind: "reverted" };
 type MultiPreviewResult = { kind: "multi-preview"; targetCount: number; foundCount: number };
 type MultiAppliedResult = {
@@ -944,25 +956,32 @@ type MultiAppliedResult = {
   skippedCount: number;
   skipped: { targetId: string; reason: string }[];
 };
-// Same product state as QuotaReachedView (acces_expire, 403), not a failure:
-// no error text, just the unlock CTA. Kept distinct from ErrorResult so the
-// raw slug is never funneled through the generic error-message fallback.
-type AccessExpiredResult = { kind: "access-expired" };
+// The three non-blocking outcomes /api/fix always answers with instead of a
+// raw HTTP error (see app/api/fix/route.ts): never paid or access expired,
+// a dead Shopify token, or any other failure (userErrors, resolveTarget
+// error, unexpected exception). None of these are rendered as a blocking
+// error - each gets its own banner with the right call to action.
+type PaymentRequiredResult = { kind: "payment-required"; billingUrl: string; message: string };
+type ReauthRequiredResult = { kind: "reauth-required"; reauthUrl: string };
+type FailedResult = { kind: "failed"; message: string };
 type FixResult =
   | PreviewResult
   | AppliedResult
   | DriftResult
-  | ErrorResult
   | RevertedResult
   | MultiPreviewResult
   | MultiAppliedResult
-  | AccessExpiredResult;
+  | PaymentRequiredResult
+  | ReauthRequiredResult
+  | FailedResult;
 
 // resolveTarget's ResolveError.error values (lib/shopifyFix.ts) are machine
 // slugs; the server also now attaches a matching "message" (see
 // lib/shopifyFix.ts's resolveErrorMessage), but this table is the client-side
 // safety net for any slug that ever arrives without one, so the fallback
-// below never renders the raw code.
+// below never renders the raw code. Also doubles as the legacy error-shape
+// table for /api/fix/revert, which still answers with {error, status} rather
+// than the {status:"failed", code, message} contract /api/fix uses.
 const FIX_ERROR_CODE_MESSAGE: Record<string, string> = {
   shopify_reauth_required:
     "La connexion a Shopify a expire. Reinstallez l'app depuis le Shopify App Store pour la retablir.",
@@ -973,6 +992,11 @@ const FIX_ERROR_CODE_MESSAGE: Record<string, string> = {
   fix_type_not_applicable: "Ce correctif ne peut pas etre applique automatiquement.",
   variant_ambiguous: "Plusieurs variantes correspondent - correction manuelle necessaire.",
   missing_policy_type: "Le type de politique est manquant.",
+  // /api/fix/revert still answers 403 {error:"acces_expire"} (not part of this
+  // route's rewrite) - give it the same non-technical wording as the
+  // payment-required banner instead of the generic fallback.
+  acces_expire:
+    "Votre accès a expiré. Rechargez la page pour débloquer de nouveau les corrections.",
 };
 
 // Never falls back to body.detail/body.error verbatim: a slug either has a
@@ -981,14 +1005,47 @@ const FIX_ERROR_CODE_MESSAGE: Record<string, string> = {
 function fixErrorMessage(body: unknown): string {
   const errs = (body as { userErrors?: { message: string }[] } | null)?.userErrors;
   if (errs?.length) return errs.map((e) => e.message).join(" ");
-  const b = body as { message?: string; error?: string } | null;
+  const b = body as { message?: string; error?: string; code?: string } | null;
   if (b?.message) return b.message;
-  if (b?.error && FIX_ERROR_CODE_MESSAGE[b.error]) return FIX_ERROR_CODE_MESSAGE[b.error];
+  const slug = b?.code ?? b?.error;
+  if (slug && FIX_ERROR_CODE_MESSAGE[slug]) return FIX_ERROR_CODE_MESSAGE[slug];
   return "Une erreur est survenue.";
 }
 
 function fixReasonMessage(reason: string): string {
   return FIX_ERROR_CODE_MESSAGE[reason] ?? reason;
+}
+
+// Translates the unconditional-200 /api/fix contract (status
+// "payment_required"/"reauth_required"/"failed") plus any genuine HTTP-level
+// failure into one shared outcome. Returns null for a success status
+// (applied/preview/drift/multi), which the caller still interprets itself.
+function sharedFixOutcome(
+  res: Response,
+  body: unknown,
+): PaymentRequiredResult | ReauthRequiredResult | FailedResult | null {
+  if (!res.ok) {
+    return { kind: "failed", message: fixErrorMessage(body) };
+  }
+  const b = body as
+    | { status?: string; billingUrl?: string; reauthUrl?: string; message?: string }
+    | null;
+  if (b?.status === "payment_required") {
+    return {
+      kind: "payment-required",
+      billingUrl: b.billingUrl || "/api/shopify/billing/start",
+      message: b.message || "Débloquez l'accès pour appliquer ce correctif.",
+    };
+  }
+  if (b?.status === "reauth_required") {
+    return b.reauthUrl
+      ? { kind: "reauth-required", reauthUrl: b.reauthUrl }
+      : { kind: "failed", message: FIX_ERROR_CODE_MESSAGE.shopify_reauth_required };
+  }
+  if (b?.status === "failed") {
+    return { kind: "failed", message: b.message || fixErrorMessage(body) };
+  }
+  return null;
 }
 
 // True for the two fixTypes whose value is HTML (Shopify's rich text editor
@@ -1078,8 +1135,13 @@ function FixActions({
 }) {
   const [busy, setBusy] = useState<null | "preview" | "apply" | "revert">(null);
   const [result, setResult] = useState<FixResult | null>(null);
+  // Lets the "Reessayer" button in the "failed" banner re-run whichever
+  // action (preview/apply/revert) produced it, instead of forcing the
+  // merchant back to the start of the flow.
+  const retryRef = useRef<() => void>(() => {});
 
   const preview = async () => {
+    retryRef.current = preview;
     setBusy("preview");
     try {
       const res = await fetch("/api/fix", {
@@ -1088,15 +1150,9 @@ function FixActions({
         body: JSON.stringify({ shop, patch, mode: "preview", auditId }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) {
-        // Same product state as the free-audit quota: access expired mid-session
-        // (the audit response that gated FixLocked can be stale). Dedicated
-        // unlock CTA, never the raw "acces_expire" slug.
-        if (body?.error === "acces_expire") {
-          setResult({ kind: "access-expired" });
-          return;
-        }
-        setResult({ kind: "error", message: fixErrorMessage(body) });
+      const shared = sharedFixOutcome(res, body);
+      if (shared) {
+        setResult(shared);
         return;
       }
       if (body?.multi) {
@@ -1115,13 +1171,14 @@ function FixActions({
         drift: Boolean(body.drift),
       });
     } catch {
-      setResult({ kind: "error", message: "Le serveur est injoignable." });
+      setResult({ kind: "failed", message: "Le serveur est injoignable." });
     } finally {
       setBusy(null);
     }
   };
 
   const apply = async () => {
+    retryRef.current = apply;
     setBusy("apply");
     try {
       const res = await fetch("/api/fix", {
@@ -1152,19 +1209,16 @@ function FixActions({
         setResult({ kind: "drift", currentLive: body.currentLive ?? null });
         return;
       }
-      if (body?.error === "acces_expire") {
-        setResult({ kind: "access-expired" });
-        return;
-      }
-      setResult({ kind: "error", message: fixErrorMessage(body) });
+      setResult(sharedFixOutcome(res, body) ?? { kind: "failed", message: fixErrorMessage(body) });
     } catch {
-      setResult({ kind: "error", message: "Le serveur est injoignable." });
+      setResult({ kind: "failed", message: "Le serveur est injoignable." });
     } finally {
       setBusy(null);
     }
   };
 
   const revert = async (fixId: string) => {
+    retryRef.current = () => revert(fixId);
     setBusy("revert");
     try {
       const res = await fetch("/api/fix/revert", {
@@ -1181,13 +1235,9 @@ function FixActions({
         setResult({ kind: "drift", currentLive: body.currentLive ?? null });
         return;
       }
-      if (body?.error === "acces_expire") {
-        setResult({ kind: "access-expired" });
-        return;
-      }
-      setResult({ kind: "error", message: fixErrorMessage(body) });
+      setResult(sharedFixOutcome(res, body) ?? { kind: "failed", message: fixErrorMessage(body) });
     } catch {
-      setResult({ kind: "error", message: "Le serveur est injoignable." });
+      setResult({ kind: "failed", message: "Le serveur est injoignable." });
     } finally {
       setBusy(null);
     }
@@ -1197,7 +1247,8 @@ function FixActions({
   const finished =
     result?.kind === "reverted" ||
     result?.kind === "multi-applied" ||
-    result?.kind === "access-expired";
+    result?.kind === "payment-required" ||
+    result?.kind === "reauth-required";
 
   return (
     <div className="mt-4 border-t border-line pt-4">
@@ -1263,23 +1314,47 @@ function FixActions({
         </p>
       )}
 
-      {result?.kind === "error" && (
-        <p className="mt-3 text-sm text-nogo">{result.message}</p>
+      {result?.kind === "failed" && (
+        <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
+          <p className="text-sm text-ink">{result.message}</p>
+          <button
+            type="button"
+            onClick={() => retryRef.current()}
+            disabled={busy !== null}
+            className="tech-label mt-3 rounded-full border border-line-strong px-3 py-1.5 text-ink hover:border-brand hover:text-brand disabled:opacity-50"
+          >
+            Réessayer
+          </button>
+        </div>
       )}
 
-      {result?.kind === "access-expired" && (
+      {result?.kind === "payment-required" && (
         <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
-          <p className="text-sm text-ink">
-            Votre acces est expire. Relancez une mise en conformite pour
-            appliquer des correctifs.
-          </p>
+          <p className="text-sm text-ink">{result.message}</p>
           <div className="mt-3">
             <UnlockButton
               shop={shop}
-              label="Debloquer - 149 CHF via Shopify"
+              billingUrl={result.billingUrl}
+              returnPath={`/report?shop=${encodeURIComponent(shop)}`}
+              label="Débloquer les corrections"
               className="tech-label rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white disabled:opacity-60"
             />
           </div>
+        </div>
+      )}
+
+      {result?.kind === "reauth-required" && (
+        <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
+          <p className="text-sm text-ink">
+            La connexion a Shopify a expire. Reinstallez l&apos;app pour
+            reconnecter cette boutique.
+          </p>
+          <a
+            href={result.reauthUrl}
+            className="tech-label mt-3 inline-block rounded-full bg-ink px-3 py-1.5 text-paper hover:bg-white"
+          >
+            Se reconnecter via le Shopify App Store
+          </a>
         </div>
       )}
 
