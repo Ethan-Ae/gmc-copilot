@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       {
         error: "acces_expire",
         message:
-          "Votre acces est expire. Relancez une mise en conformite pour appliquer des correctifs.",
+          "Votre accès est expiré. Relancez une mise en conformité pour appliquer des correctifs.",
       },
       { status: 403 },
     );
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     // text, just a fixed French message (same convention as auditErrors.ts).
     console.error(`[fix:revert] fixHistoryId=${id}`, err);
     return jsonResponse(
-      { status: "error", message: "Une erreur technique est survenue. Reessayez." },
+      { status: "error", message: "Une erreur technique est survenue. Réessayez." },
       { status: 502 },
     );
   }

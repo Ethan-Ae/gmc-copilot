@@ -11,7 +11,7 @@ type BillingStatus = { access: Access } | null;
 type LoadState = "loading" | "loaded" | "load-error";
 
 // Per-shop billing panel. Since the pricing pivot there is a single offer: the
-// one-time 149 CHF "Mise en conformite" charge, which unlocks full access to
+// one-time 149 CHF "Mise en conformité" charge, which unlocks full access to
 // the shop for 30 days. After that the access expires and the merchant can
 // re-run a compliance. Starting a charge redirects to Shopify's confirmationUrl.
 export default function ShopBilling({ shop }: { shop: string }) {
@@ -65,7 +65,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
       // Deliberately never rendered from body.detail/body.error: whatever the
       // billing route failed with, the merchant only ever sees this fixed
       // sentence (same convention as UnlockButton in app/report/ReportClient.tsx).
-      setActionError("La creation du paiement a echoue. Reessayez.");
+      setActionError("La création du paiement a échoué. Réessayez.");
     } catch {
       setActionError("Le serveur est injoignable.");
     }
@@ -76,7 +76,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
     return (
       <div className="rounded-2xl border border-line bg-paper p-4">
         <p className="tech-label text-faint">Facturation</p>
-        <p className="mt-2 text-sm text-muted">Chargement de l&apos;etat...</p>
+        <p className="mt-2 text-sm text-muted">Chargement de l&apos;état...</p>
       </div>
     );
   }
@@ -93,7 +93,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
           }}
           className="mt-2 text-sm text-brand hover:underline"
         >
-          Etat de facturation indisponible - reessayer
+          État de facturation indisponible - réessayer
         </button>
       </div>
     );
@@ -109,7 +109,7 @@ export default function ShopBilling({ shop }: { shop: string }) {
       {/* Full access active: single confirmation badge. */}
       {full && (
         <div className="mt-2 flex flex-wrap gap-2">
-          <Badge>Acces complet actif - 30 jours</Badge>
+          <Badge>Accès complet actif - 30 jours</Badge>
         </div>
       )}
 
@@ -117,12 +117,12 @@ export default function ShopBilling({ shop }: { shop: string }) {
       {expired && (
         <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
           <p className="text-sm text-ink">
-            Votre acces est expire. Relancez une mise en conformite pour
+            Votre accès est expiré. Relancez une mise en conformité pour
             re-auditer cette boutique.
           </p>
           <div className="mt-3">
             <Offer
-              title="Relancer la mise en conformite"
+              title="Relancer la mise en conformité"
               price="149 CHF - paiement unique via Shopify"
               action="Relancer"
               busy={busy}
@@ -136,9 +136,9 @@ export default function ShopBilling({ shop }: { shop: string }) {
       {!full && !expired && (
         <div className="mt-3">
           <Offer
-            title="Debloquer la mise en conformite"
-            price="149 CHF - acces complet 30 jours via Shopify"
-            action="Debloquer"
+            title="Débloquer la mise en conformité"
+            price="149 CHF - accès complet 30 jours via Shopify"
+            action="Débloquer"
             busy={busy}
             onClick={start}
           />

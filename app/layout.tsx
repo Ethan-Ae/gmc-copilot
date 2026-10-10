@@ -23,7 +23,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Feedcompliant - Audit de conformite Google Merchant Center",
+  title: "Feedcompliant - Audit de conformité Google Merchant Center",
   description:
     "Feedcompliant inspecte ta boutique Shopify et rend un verdict go / no-go avant la review Google Merchant Center.",
 };

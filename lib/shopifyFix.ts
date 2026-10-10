@@ -53,11 +53,11 @@ export type ResolveError = { error: string; status: number };
 // /api/fix and /api/fix/revert attach a human message via this table so a
 // merchant-facing response never falls back to the raw slug.
 const RESOLVE_ERROR_MESSAGE: Record<string, string> = {
-  target_not_found: "Le produit ou l'element vise n'a pas ete trouve dans la boutique.",
+  target_not_found: "Le produit ou l'élément visé n'a pas été trouvé dans la boutique.",
   invalid_field: "Ce champ n'est pas pris en charge pour ce correctif.",
   missing_target_id: "La cible du correctif est introuvable.",
-  fix_type_not_applicable: "Ce correctif ne peut pas etre applique automatiquement.",
-  variant_ambiguous: "Plusieurs variantes correspondent - correction manuelle necessaire.",
+  fix_type_not_applicable: "Ce correctif ne peut pas être appliqué automatiquement.",
+  variant_ambiguous: "Plusieurs variantes correspondent - correction manuelle nécessaire.",
   missing_policy_type: "Le type de politique est manquant.",
 };
 
@@ -313,7 +313,7 @@ async function resolveProductSeo(
           return [
             {
               message:
-                "L'ecriture n'a pas ete confirmee par Shopify, la description est restee vide. Reessayez.",
+                "L'écriture n'a pas été confirmée par Shopify, la description est restée vide. Réessayez.",
             },
           ];
         }
@@ -492,7 +492,7 @@ async function resolvePolicy(
         return [
           {
             message:
-              "L'ecriture n'a pas ete confirmee par Shopify, le contenu de la politique ne correspond pas. Reessayez.",
+              "L'écriture n'a pas été confirmée par Shopify, le contenu de la politique ne correspond pas. Réessayez.",
           },
         ];
       }

@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Conditions - Feedcompliant",
   description:
-    "Conditions d'utilisation de Feedcompliant : service fourni en l'etat, portee de l'audit, tarification et droit applicable.",
+    "Conditions d'utilisation de Feedcompliant : service fourni en l'état, portée de l'audit, tarification et droit applicable.",
 };
 
 export default function TermsPage() {
@@ -20,24 +20,24 @@ export default function TermsPage() {
         </p>
 
         <div className="mt-12 space-y-10">
-          <Section title="Service fourni en l'etat">
+          <Section title="Service fourni en l'état">
             <p>
-              Feedcompliant est fourni en l&apos;etat, sans garantie de
-              disponibilite ni d&apos;absence d&apos;erreur.
+              Feedcompliant est fourni en l&apos;état, sans garantie de
+              disponibilité ni d&apos;absence d&apos;erreur.
             </p>
           </Section>
 
-          <Section title="Portee de l'audit">
+          <Section title="Portée de l'audit">
             <p>
-              L&apos;audit est une aide a la mise en conformite. Il ne garantit
-              pas la decision de Google Merchant Center, qui reste seul juge de
+              L&apos;audit est une aide à la mise en conformité. Il ne garantit
+              pas la décision de Google Merchant Center, qui reste seul juge de
               la validation de ta boutique.
             </p>
           </Section>
 
           <Section title="Tarification">
             <p>
-              Les tarifs applicables sont ceux affiches sur la page{" "}
+              Les tarifs applicables sont ceux affichés sur la page{" "}
               <Link
                 href="/pricing"
                 className="text-brand underline hover:text-brand-ink"
@@ -50,7 +50,7 @@ export default function TermsPage() {
 
           <Section title="Droit applicable">
             <p>
-              Ces conditions sont regies par le droit suisse.
+              Ces conditions sont régies par le droit suisse.
             </p>
           </Section>
         </div>

@@ -48,19 +48,19 @@ const VERDICT: Record<
   { label: string; rail: string; chip: string; dot: string }
 > = {
   go: {
-    label: "Pret pour la review",
+    label: "Prêt pour la review",
     rail: "border-l-go",
     chip: "bg-go-soft text-go",
     dot: "bg-go",
   },
   warning: {
-    label: "A corriger avant soumission",
+    label: "À corriger avant soumission",
     rail: "border-l-warn",
     chip: "bg-warn-soft text-warn",
     dot: "bg-warn",
   },
   "no-go": {
-    label: "Ne pas soumettre en l'etat",
+    label: "Ne pas soumettre en l'état",
     rail: "border-l-nogo",
     chip: "bg-nogo-soft text-nogo",
     dot: "bg-nogo",
@@ -79,13 +79,13 @@ const AREA_LABEL: Record<Area, string> = {
   seo: "SEO",
   pricing: "Prix",
   images: "Images",
-  identity: "Identite",
+  identity: "Identité",
   policy: "Politiques",
   shipping: "Livraison",
   returns: "Retours",
-  claims: "Allegations",
+  claims: "Allégations",
   theme: "Vitrine",
-  "needs-verification": "A verifier",
+  "needs-verification": "À vérifier",
 };
 
 export default function LandingPage({ appStoreUrl }: { appStoreUrl: string }) {
@@ -118,7 +118,7 @@ export default function LandingPage({ appStoreUrl }: { appStoreUrl: string }) {
           status: "locked",
           message:
             body.message ??
-            "Ta boutique est protegee par mot de passe, on ne peut pas l'auditer publiquement.",
+            "Ta boutique est protégée par mot de passe, on ne peut pas l'auditer publiquement.",
         });
         return;
       }
@@ -145,20 +145,20 @@ export default function LandingPage({ appStoreUrl }: { appStoreUrl: string }) {
             <NoticeView
               tone="nogo"
               eyebrow="Boutique injoignable"
-              message="Impossible d'atteindre ta boutique, reessaie dans quelques minutes."
+              message="Impossible d'atteindre ta boutique, réessaie dans quelques minutes."
             />
           )}
           {state.status === "rate-limited" && (
             <NoticeView
               tone="warn"
               eyebrow="Trop de tentatives"
-              message="Tu as lance beaucoup d'audits gratuits. Reessaie dans quelques heures ou passe au rapport complet."
+              message="Tu as lancé beaucoup d'audits gratuits. Réessaie dans quelques heures ou passe au rapport complet."
             />
           )}
           {state.status === "locked" && (
             <NoticeView
               tone="warn"
-              eyebrow="Boutique verrouillee"
+              eyebrow="Boutique verrouillée"
               message={state.message}
             />
           )}
@@ -200,21 +200,21 @@ function Hero({
 
       <div className="relative mx-auto w-full max-w-3xl px-5 pt-16 pb-14 sm:pt-24 sm:pb-20">
         <p className="tech-label text-brand-lite mb-5">
-          Audit de conformite Google Merchant Center
+          Audit de conformité Google Merchant Center
         </p>
 
         <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.05] max-w-3xl">
-          Google a refuse ton compte.
+          Google a refusé ton compte.
           <span className="block text-paper-dim">
-            On te montre tout ce qui peut le declencher - et on le corrige.
+            On te montre tout ce qui peut le déclencher - et on le corrige.
           </span>
         </h1>
 
         <p className="mt-6 text-lg sm:text-xl text-paper-dim max-w-xl leading-relaxed font-normal">
-          Feedcompliant inspecte ta boutique Shopify avec la severite d&apos;un
-          auditeur GMC : chaque promesse affichee est confrontee a tes policies, tes
-          reglages et tes fiches produit. Tu recois la liste de ce qui risque de
-          bloquer, puis les correctifs prets a appliquer.
+          Feedcompliant inspecte ta boutique Shopify avec la sévérité d&apos;un
+          auditeur GMC : chaque promesse affichée est confrontée à tes policies, tes
+          réglages et tes fiches produit. Tu reçois la liste de ce qui risque de
+          bloquer, puis les correctifs prêts à appliquer.
         </p>
 
         {/* Audit form */}
@@ -244,7 +244,7 @@ function Hero({
           </div>
           <p className="mt-3 text-sm text-paper-faint leading-relaxed">
             Verdict en 30 secondes. Sans compte, sans carte. On lit uniquement
-            ce qui est deja public sur ta boutique.
+            ce qui est déjà public sur ta boutique.
           </p>
         </div>
 
@@ -278,8 +278,8 @@ function LoadingView() {
         Analyse de ta boutique en cours...
       </h2>
       <p className="mt-3 text-muted leading-relaxed">
-        On lit ta vitrine publique et on la confronte aux regles Google Merchant
-        Center. Cela prend generalement 10 a 30 secondes. Reste sur la page.
+        On lit ta vitrine publique et on la confronte aux règles Google Merchant
+        Center. Cela prend généralement 10 à 30 secondes. Reste sur la page.
       </p>
       <div className="scan-track h-1 rounded-full mt-8" aria-hidden="true" />
       <p className="sr-only" role="status">
@@ -343,14 +343,14 @@ function TeaserResult({
             </div>
           </div>
           <span className={`tech-label rounded-full px-2 py-1 ${verdict.chip}`}>
-            {data.issueCount} probleme{data.issueCount > 1 ? "s" : ""} detecte
+            {data.issueCount} problème{data.issueCount > 1 ? "s" : ""} détecté
             {data.issueCount > 1 ? "s" : ""}
           </span>
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 tech-label text-faint">
           <span>{data.domain}</span>
           <span aria-hidden="true">/</span>
-          <span>Apercu gratuit</span>
+          <span>Aperçu gratuit</span>
         </div>
       </div>
 
@@ -424,17 +424,17 @@ function LockedPaywall({
                 Critique
               </span>
               <span className="tech-label rounded-full px-2 py-1 bg-slate-soft text-slate">
-                Allegations
+                Allégations
               </span>
             </div>
             <p className="mt-3 text-ink leading-relaxed">
-              Probleme de conformite detecte sur ta boutique, avec le correctif
-              a appliquer en un clic avant de redemander la review Google.
+              Problème de conformité détecté sur ta boutique, avec le correctif
+              à appliquer en un clic avant de redemander la review Google.
             </p>
             <div className="mt-4 border-l-2 border-l-brand bg-brand-soft/70 rounded-r-xl px-4 py-3">
               <p className="tech-label text-brand mb-1">Correctif</p>
               <p className="text-ink leading-relaxed">
-                Texte de correction pret a appliquer, masque dans l&apos;apercu
+                Texte de correction prêt à appliquer, masqué dans l&apos;aperçu
                 gratuit.
               </p>
             </div>
@@ -444,15 +444,15 @@ function LockedPaywall({
 
       {/* Overlay CTA */}
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center bg-paper/70 backdrop-blur-[2px] px-5">
-        <p className="tech-label text-brand mb-2">Rapport complet verrouille</p>
+        <p className="tech-label text-brand mb-2">Rapport complet verrouillé</p>
         <h3 className="text-xl font-semibold tracking-tight max-w-md">
-          {`Il reste ${remaining} probleme${
+          {`Il reste ${remaining} problème${
             remaining > 1 ? "s" : ""
-          } et tous les correctifs detailles restent a decouvrir.`}
+          } et tous les correctifs détaillés restent à découvrir.`}
         </h3>
         <p className="mt-3 text-muted max-w-md leading-relaxed">
-          Debloque le rapport complet, les correctifs prets a appliquer et le
-          suivi de conformite.
+          Débloque le rapport complet, les correctifs prêts à appliquer et le
+          suivi de conformité.
         </p>
         <a
           href={appStoreUrl}
@@ -476,17 +476,17 @@ function PositiveUpsell({
 }) {
   const body =
     issueCount === 0
-      ? "Aucun probleme detecte sur les pages publiques. Un audit complet verifie aussi tes donnees produit et ton statut Merchant Center."
-      : `On a repere ${issueCount} point${
+      ? "Aucun problème détecté sur les pages publiques. Un audit complet vérifie aussi tes données produit et ton statut Merchant Center."
+      : `On a repéré ${issueCount} point${
           issueCount > 1 ? "s" : ""
         } mineur${
           issueCount > 1 ? "s" : ""
-        }. Un audit complet couvre aussi tes donnees produit et ton statut Merchant Center avant ta review GMC.`;
+        }. Un audit complet couvre aussi tes données produit et ton statut Merchant Center avant ta review GMC.`;
   return (
     <div className="rounded-2xl border border-go/40 bg-go-soft/50 p-6 text-center sm:text-left">
       <p className="tech-label text-go mb-2">Bonne nouvelle</p>
       <h3 className="text-xl font-semibold tracking-tight">
-        Ta boutique est deja solide
+        Ta boutique est déjà solide
       </h3>
       <p className="mt-3 text-muted max-w-xl leading-relaxed">{body}</p>
       <a
@@ -543,17 +543,17 @@ const CAUSES = [
   {
     n: "01",
     title: "Une promesse que rien ne prouve",
-    body: "Livraison gratuite annoncee sur la home, absente de la page livraison. Google constate l'ecart entre les deux pages, pas ton intention.",
+    body: "Livraison gratuite annoncée sur la home, absente de la page livraison. Google constate l'écart entre les deux pages, pas ton intention.",
   },
   {
     n: "02",
-    title: "Un commercant non identifiable",
-    body: "Pas d'adresse, pas de contact joignable, un nom qui change d'une page a l'autre : le compte n'est pas considere comme verifiable.",
+    title: "Un commerçant non identifiable",
+    body: "Pas d'adresse, pas de contact joignable, un nom qui change d'une page à l'autre : le compte n'est pas considéré comme vérifiable.",
   },
   {
     n: "03",
-    title: "Des policies incompletes",
-    body: "Retours, remboursements, conditions de vente : si une regle manque ou contredit la vitrine, la review bloque sans preciser laquelle.",
+    title: "Des policies incomplètes",
+    body: "Retours, remboursements, conditions de vente : si une règle manque ou contredit la vitrine, la review bloque sans préciser laquelle.",
   },
 ];
 
@@ -562,9 +562,9 @@ function WhyRefused() {
     <section className="border-t border-line bg-paper">
       <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:py-20">
         <SectionHead
-          eyebrow="Le probleme"
+          eyebrow="Le problème"
           title="Le motif « misrepresentation » ne dit jamais ce qui cloche."
-          lead="Google notifie un refus pour presentation trompeuse sans indiquer la page ni la phrase en cause. Dans la plupart des cas, il ne s'agit pas de fraude mais d'ecarts mecaniques entre ce que ta vitrine annonce et ce que tes policies et tes reglages disent vraiment. Le travail consiste a trouver chaque ecart, puis a le fermer."
+          lead="Google notifie un refus pour présentation trompeuse sans indiquer la page ni la phrase en cause. Dans la plupart des cas, il ne s'agit pas de fraude mais d'écarts mécaniques entre ce que ta vitrine annonce et ce que tes policies et tes réglages disent vraiment. Le travail consiste à trouver chaque écart, puis à le fermer."
         />
 
         <div className="mt-10 grid gap-4 sm:grid-cols-3">
@@ -585,10 +585,10 @@ function WhyRefused() {
         </div>
 
         <div className="mt-10 border-l-2 border-l-brand bg-brand-soft/60 rounded-r-xl px-5 py-4">
-          <p className="tech-label text-brand mb-1">Regle de travail</p>
+          <p className="tech-label text-brand mb-1">Règle de travail</p>
           <p className="text-ink leading-relaxed">
-            Rendre la boutique ennuyeusement verifiable. Toute claim publique
-            doit etre vraie, prouvee ailleurs sur le site, et identique partout.
+            Rendre la boutique ennuyeusement vérifiable. Toute claim publique
+            doit être vraie, prouvée ailleurs sur le site, et identique partout.
           </p>
         </div>
       </div>
@@ -598,44 +598,44 @@ function WhyRefused() {
 
 const SCOPE: { area: string; body: string }[] = [
   {
-    area: "Identite",
-    body: "Nom commercial, adresse, moyen de contact reellement joignable.",
+    area: "Identité",
+    body: "Nom commercial, adresse, moyen de contact réellement joignable.",
   },
   {
     area: "Politiques",
-    body: "Livraison, retours, remboursements, CGV : presentes, completes, coherentes entre elles.",
+    body: "Livraison, retours, remboursements, CGV : présentes, complètes, cohérentes entre elles.",
   },
   {
     area: "Livraison",
-    body: "Delais et frais annonces sur la vitrine contre ce que disent les policies et les reglages.",
+    body: "Délais et frais annoncés sur la vitrine contre ce que disent les policies et les réglages.",
   },
   {
     area: "Retours",
-    body: "Fenetre de retour, conditions, qui paie le renvoi, et ou c'est ecrit.",
+    body: "Fenêtre de retour, conditions, qui paie le renvoi, et où c'est écrit.",
   },
   {
-    area: "Allegations",
-    body: "Garanties, avis, badges, urgence, promotions : chaque claim doit etre prouvable.",
+    area: "Allégations",
+    body: "Garanties, avis, badges, urgence, promotions : chaque claim doit être prouvable.",
   },
   {
     area: "Prix",
-    body: "Prix affiche, prix barre, devise, coherence entre fiche produit et panier.",
+    body: "Prix affiché, prix barré, devise, cohérence entre fiche produit et panier.",
   },
   {
     area: "Produit",
-    body: "Titres, descriptions, variantes, disponibilite envoyees au feed.",
+    body: "Titres, descriptions, variantes, disponibilité envoyées au feed.",
   },
   {
     area: "Images",
-    body: "Images exploitables par Google et coherentes avec la fiche produit.",
+    body: "Images exploitables par Google et cohérentes avec la fiche produit.",
   },
   {
     area: "SEO",
-    body: "Titres et descriptions SEO alignes sur ce que voit reellement Merchant Center.",
+    body: "Titres et descriptions SEO alignés sur ce que voit réellement Merchant Center.",
   },
   {
     area: "Vitrine",
-    body: "Textes du theme, banniere panier, navigation, FAQ : la ou se cachent les claims oubliees.",
+    body: "Textes du thème, bannière panier, navigation, FAQ : là où se cachent les claims oubliées.",
   },
 ];
 
@@ -644,9 +644,9 @@ function AuditScope() {
     <section className="border-t border-line bg-surface">
       <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:py-20">
         <SectionHead
-          eyebrow="Perimetre"
-          title="Dix domaines inspectes, un par un."
-          lead="Le meme perimetre que celui d'un auditeur qui cherche une seule incoherence. Rien n'est declare conforme sans preuve visible sur ton site."
+          eyebrow="Périmètre"
+          title="Dix domaines inspectés, un par un."
+          lead="Le même périmètre que celui d'un auditeur qui cherche une seule incohérence. Rien n'est déclaré conforme sans preuve visible sur ton site."
         />
 
         <ul className="mt-10 grid gap-px bg-line border border-line rounded-2xl overflow-hidden sm:grid-cols-2">
@@ -673,17 +673,17 @@ const STEPS = [
   {
     n: "01",
     title: "Audit",
-    body: "On crawle ta vitrine, tes policies et tes donnees produit, puis on confronte chaque claim a ce qui la prouve. Tu obtiens la liste complete de ce qui risque de bloquer la review.",
+    body: "On crawle ta vitrine, tes policies et tes données produit, puis on confronte chaque claim à ce qui la prouve. Tu obtiens la liste complète de ce qui risque de bloquer la review.",
   },
   {
     n: "02",
     title: "Correctifs en 1 clic",
-    body: "Chaque probleme arrive avec sa correction exacte, ecrite sans jargon et sans rien inventer. Tu relis, tu appliques sur Shopify, c'est ecrit pour toi.",
+    body: "Chaque problème arrive avec sa correction exacte, écrite sans jargon et sans rien inventer. Tu relis, tu appliques sur Shopify, c'est écrit pour toi.",
   },
   {
     n: "03",
     title: "Re-audit jusqu'au go",
-    body: "Pendant 30 jours d'acces complet, re-audite autant que tu veux. On ne donne un go que lorsque la donnee corrigee est bien visible dans Merchant Center.",
+    body: "Pendant 30 jours d'accès complet, re-audite autant que tu veux. On ne donne un go que lorsque la donnée corrigée est bien visible dans Merchant Center.",
   },
 ];
 
@@ -692,9 +692,9 @@ function HowItWorks() {
     <section className="border-t border-line bg-paper text-ink">
       <div className="mx-auto w-full max-w-3xl px-5 py-16 sm:py-20">
         <SectionHead
-          eyebrow="Comment ca marche"
+          eyebrow="Comment ça marche"
           tone="lite"
-          title="Trois etapes, de la panne au feu vert."
+          title="Trois étapes, de la panne au feu vert."
         />
 
         <ol className="mt-10 space-y-px bg-ink-line border border-ink-line rounded-2xl overflow-hidden">
@@ -724,7 +724,7 @@ function PricingStrip() {
         <SectionHead
           eyebrow="Tarif"
           title="Un paiement unique. Pas d'abonnement."
-          lead="La mise en conformite est un chantier, pas une routine mensuelle. Tu payes une fois, tu as 30 jours pour aller au bout, puis tu repars."
+          lead="La mise en conformité est un chantier, pas une routine mensuelle. Tu payes une fois, tu as 30 jours pour aller au bout, puis tu repars."
         />
 
         <div className="mt-10 grid gap-6 md:grid-cols-2 items-stretch">
@@ -743,7 +743,7 @@ function PricingStrip() {
               {[
                 "Audit de ta vitrine publique",
                 "Verdict go / no-go",
-                "2 problemes reveles",
+                "2 problèmes révélés",
                 "Aucune connexion requise",
               ].map((f) => (
                 <li
@@ -768,11 +768,11 @@ function PricingStrip() {
 
           <div className="relative flex flex-col border border-brand/50 rounded-2xl bg-ink-soft p-6">
             <span className="absolute -top-3 left-6 tech-label rounded-full bg-ink px-2 py-1 text-paper">
-              Recommande
+              Recommandé
             </span>
             <p className="tech-label text-brand mb-2">One-shot</p>
             <h3 className="text-xl font-semibold tracking-tight">
-              Mise en conformite
+              Mise en conformité
             </h3>
             <div className="mt-4 flex items-baseline gap-2">
               <span className="text-3xl font-semibold tracking-tight">
@@ -782,10 +782,10 @@ function PricingStrip() {
             </div>
             <ul className="mt-6 space-y-3 flex-1">
               {[
-                "1 boutique, acces complet 30 jours",
-                "Rapport complet, tous les problemes",
-                "Correctifs appliques sur Shopify en 1 clic",
-                "Audits et re-audits illimites",
+                "1 boutique, accès complet 30 jours",
+                "Rapport complet, tous les problèmes",
+                "Correctifs appliqués sur Shopify en 1 clic",
+                "Audits et re-audits illimités",
               ].map((f) => (
                 <li
                   key={f}
@@ -803,7 +803,7 @@ function PricingStrip() {
               href="/pricing"
               className="mt-8 block text-center bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
             >
-              Voir le detail de l&apos;offre
+              Voir le détail de l&apos;offre
             </Link>
           </div>
         </div>
@@ -814,24 +814,24 @@ function PricingStrip() {
 
 const FAQ = [
   {
-    q: "Est-ce que ca garantit la validation Google ?",
-    a: "Non, et personne ne peut la garantir : la decision reste celle de Google. Ce qu'on fait, c'est fermer tous les ecarts qu'on detecte avant que tu redemandes une review, et refuser de donner un go tant que la donnee corrigee n'est pas visible dans Merchant Center.",
+    q: "Est-ce que ça garantit la validation Google ?",
+    a: "Non, et personne ne peut la garantir : la décision reste celle de Google. Ce qu'on fait, c'est fermer tous les écarts qu'on détecte avant que tu redemandes une review, et refuser de donner un go tant que la donnée corrigée n'est pas visible dans Merchant Center.",
   },
   {
     q: "Il faut savoir coder ?",
-    a: "Non. Chaque correctif est redige pour toi et applique sur ta boutique Shopify en un clic. Tu relis le texte propose, tu valides, c'est ecrit.",
+    a: "Non. Chaque correctif est rédigé pour toi et appliqué sur ta boutique Shopify en un clic. Tu relis le texte proposé, tu valides, c'est écrit.",
   },
   {
-    q: "Quelles donnees vous lisez ?",
-    a: "Pour l'audit gratuit, uniquement les pages deja publiques de ta boutique, comme le ferait n'importe quel visiteur. Pour l'acces complet, tes fiches produit Shopify et le statut de ton compte Merchant Center, via les connexions officielles que tu autorises.",
+    q: "Quelles données vous lisez ?",
+    a: "Pour l'audit gratuit, uniquement les pages déjà publiques de ta boutique, comme le ferait n'importe quel visiteur. Pour l'accès complet, tes fiches produit Shopify et le statut de ton compte Merchant Center, via les connexions officielles que tu autorises.",
   },
   {
-    q: "Mon compte est deja suspendu, c'est trop tard ?",
-    a: "C'est le cas le plus courant, et non. L'audit sert justement a trouver ce qui a declenche le refus avant de redemander une review : redemander sans avoir corrige te fait surtout perdre du temps.",
+    q: "Mon compte est déjà suspendu, c'est trop tard ?",
+    a: "C'est le cas le plus courant, et non. L'audit sert justement à trouver ce qui a déclenché le refus avant de redemander une review : redemander sans avoir corrigé te fait surtout perdre du temps.",
   },
   {
-    q: "Pourquoi un paiement unique plutot qu'un abonnement ?",
-    a: "Parce que l'objectif est que tu n'aies plus besoin de nous. 149 CHF, 30 jours d'acces complet sur une boutique, audits et re-audits illimites jusqu'a ce que ce soit propre.",
+    q: "Pourquoi un paiement unique plutôt qu'un abonnement ?",
+    a: "Parce que l'objectif est que tu n'aies plus besoin de nous. 149 CHF, 30 jours d'accès complet sur une boutique, audits et re-audits illimités jusqu'à ce que ce soit propre.",
   },
 ];
 
@@ -868,7 +868,7 @@ function FinalCta() {
             Savoir ce qui bloque prend 30 secondes.
           </h2>
           <p className="mt-4 text-muted max-w-lg mx-auto leading-relaxed">
-            Entre l&apos;URL de ta boutique et recois le verdict. Pas de compte,
+            Entre l&apos;URL de ta boutique et reçois le verdict. Pas de compte,
             pas de carte, pas d&apos;appel commercial.
           </p>
           <a

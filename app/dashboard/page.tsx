@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 
 const VERDICT: Record<string, { label: string; dot: string; text: string }> = {
   go: { label: "Go", dot: "bg-go", text: "text-go" },
-  warning: { label: "A surveiller", dot: "bg-warn", text: "text-warn" },
+  warning: { label: "À surveiller", dot: "bg-warn", text: "text-warn" },
   "no-go": { label: "No-go", dot: "bg-nogo", text: "text-nogo" },
 };
 
@@ -102,8 +102,8 @@ export default async function DashboardPage({
       {billingReturned && (
         <div className="mt-4 rounded-2xl border border-go/40 bg-go-soft/60 p-4">
           <p className="text-ink">
-            Retour de Shopify pris en compte. L&apos;etat de facturation
-            ci-dessous est a jour.
+            Retour de Shopify pris en compte. L&apos;état de facturation
+            ci-dessous est à jour.
           </p>
         </div>
       )}
@@ -127,9 +127,9 @@ export default async function DashboardPage({
           {noMerchantAccount && (
             <div className="mt-2 rounded-2xl border border-nogo/40 bg-nogo-soft/50 p-4">
               <p className="text-ink">
-                Aucun compte Merchant Center n&apos;est associe a ce compte
+                Aucun compte Merchant Center n&apos;est associé à ce compte
                 Google. Connecte un compte Google qui administre un compte
-                Merchant Center, puis reessaie.
+                Merchant Center, puis réessaie.
               </p>
             </div>
           )}

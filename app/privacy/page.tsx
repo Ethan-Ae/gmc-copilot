@@ -1,29 +1,29 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Confidentialite - Feedcompliant",
+  title: "Confidentialité - Feedcompliant",
   description:
-    "Politique de confidentialite de Feedcompliant : donnees traitees, finalites, conservation et suppression.",
+    "Politique de confidentialité de Feedcompliant : données traitées, finalités, conservation et suppression.",
 };
 
 export default function PrivacyPage() {
   return (
     <main className="flex-1 flex flex-col">
       <section className="mx-auto w-full max-w-3xl px-5 pt-16 sm:pt-24 pb-16">
-        <p className="tech-label text-brand mb-4">Confidentialite</p>
+        <p className="tech-label text-brand mb-4">Confidentialité</p>
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-tight">
-          Politique de confidentialite
+          Politique de confidentialité
         </h1>
         <p className="mt-4 text-muted leading-relaxed">
-          Cette page decrit les donnees que Feedcompliant traite, pourquoi, et
-          comment elles sont conservees puis supprimees.
+          Cette page décrit les données que Feedcompliant traite, pourquoi, et
+          comment elles sont conservées puis supprimées.
         </p>
 
         <div className="mt-12 space-y-10">
-          <Section title="Editeur">
+          <Section title="Éditeur">
             <p>
-              Le service Feedcompliant est edite par Feedcompliant. Pour toute
-              question relative a ces donnees, contacte{" "}
+              Le service Feedcompliant est édité par Feedcompliant. Pour toute
+              question relative à ces données, contacte{" "}
               <a
                 href="mailto:ethan.aeby08@outlook.com"
                 className="text-brand underline hover:text-brand-ink"
@@ -34,61 +34,61 @@ export default function PrivacyPage() {
             </p>
           </Section>
 
-          <Section title="Donnees traitees">
+          <Section title="Données traitées">
             <ul className="space-y-3">
               <Item>
-                Compte utilisateur : ton adresse email, geree via notre
+                Compte utilisateur : ton adresse email, gérée via notre
                 prestataire d&apos;authentification Clerk.
               </Item>
               <Item>
-                Tokens OAuth Shopify et Google : stockes chiffres cote serveur
-                et jamais partages avec des tiers.
+                Tokens OAuth Shopify et Google : stockés chiffrés côté serveur
+                et jamais partagés avec des tiers.
               </Item>
               <Item>
-                Donnees de ta boutique : lues via les API Shopify et Google
+                Données de ta boutique : lues via les API Shopify et Google
                 Merchant Center pour produire les audits (informations produit,
-                policies, feed, reglages Merchant Center).
+                policies, feed, réglages Merchant Center).
               </Item>
               <Item>
-                Historique d&apos;audits : les rapports et resultats generes
+                Historique d&apos;audits : les rapports et résultats générés
                 pour tes boutiques.
               </Item>
             </ul>
           </Section>
 
-          <Section title="Finalite">
+          <Section title="Finalité">
             <p>
-              Ces donnees servent uniquement a auditer la conformite de ta
-              boutique a Google Merchant Center et a appliquer les corrections
-              que tu demandes. Nous ne vendons aucune donnee et ne faisons pas
-              de publicite.
+              Ces données servent uniquement à auditer la conformité de ta
+              boutique à Google Merchant Center et à appliquer les corrections
+              que tu demandes. Nous ne vendons aucune donnée et ne faisons pas
+              de publicité.
             </p>
           </Section>
 
-          <Section title="Partage des donnees avec des tiers">
+          <Section title="Partage des données avec des tiers">
             <p>
-              Feedcompliant ne vend ni ne loue aucune donnee. Les donnees Google
-              (donnees Merchant Center accedees en lecture via l&apos;API
-              Content) ne sont partagees avec aucun tiers a des fins commerciales
+              Feedcompliant ne vend ni ne loue aucune donnée. Les données Google
+              (données Merchant Center accédées en lecture via l&apos;API
+              Content) ne sont partagées avec aucun tiers à des fins commerciales
               ou publicitaires.
             </p>
             <p className="mt-3">
-              Nous faisons appel a des sous-traitants techniques, strictement
-              necessaires au fonctionnement du service :
+              Nous faisons appel à des sous-traitants techniques, strictement
+              nécessaires au fonctionnement du service :
             </p>
             <ul className="mt-3 space-y-3">
               <Item>
-                Vercel Inc. : hebergement de l&apos;application et execution du
+                Vercel Inc. : hébergement de l&apos;application et exécution du
                 code serveur.
               </Item>
               <Item>
-                Neon Inc. : base de donnees Postgres, stockage des donnees du
+                Neon Inc. : base de données Postgres, stockage des données du
                 compte et des rapports.
               </Item>
               <Item>
-                Anthropic PBC : traitement des donnees d&apos;audit par modele de
-                langage pour generer les rapports. Les donnees Merchant Center
-                brutes ne sont transmises que dans la mesure necessaire a
+                Anthropic PBC : traitement des données d&apos;audit par modèle de
+                langage pour générer les rapports. Les données Merchant Center
+                brutes ne sont transmises que dans la mesure nécessaire à
                 l&apos;analyse.
               </Item>
               <Item>
@@ -100,17 +100,17 @@ export default function PrivacyPage() {
               </Item>
             </ul>
             <p className="mt-3">
-              Aucune donnee Google n&apos;est transmise a d&apos;autres tiers que
-              ces sous-traitants, et aucune donnee Google n&apos;est utilisee a
-              des fins publicitaires. Notre usage des donnees Google respecte la
+              Aucune donnée Google n&apos;est transmise à d&apos;autres tiers que
+              ces sous-traitants, et aucune donnée Google n&apos;est utilisée à
+              des fins publicitaires. Notre usage des données Google respecte la
               Google API Services User Data Policy, y compris ses exigences
               Limited Use.
             </p>
           </Section>
 
-          <Section title="Donnees Google et Limited Use">
+          <Section title="Données Google et Limited Use">
             <p>
-              Les donnees Google obtenues via les API Google respectent la{" "}
+              Les données Google obtenues via les API Google respectent la{" "}
               <a
                 href="https://developers.google.com/terms/api-services-user-data-policy"
                 className="text-brand underline hover:text-brand-ink"
@@ -123,29 +123,29 @@ export default function PrivacyPage() {
             </p>
           </Section>
 
-          <Section title="Protection des donnees">
+          <Section title="Protection des données">
             <ul className="space-y-3">
               <Item>
-                Chiffrement en transit : tous les echanges passent par TLS/HTTPS,
+                Chiffrement en transit : tous les échanges passent par TLS/HTTPS,
                 y compris avec les API Google et Shopify.
               </Item>
               <Item>
-                Chiffrement au repos : notre base de donnees (Neon) chiffre les
-                donnees stockees.
+                Chiffrement au repos : notre base de données (Neon) chiffre les
+                données stockées.
               </Item>
               <Item>
-                Jetons d&apos;acces Google et Shopify stockes uniquement cote
-                serveur, jamais exposes au navigateur, avec un acces restreint a
+                Jetons d&apos;accès Google et Shopify stockés uniquement côté
+                serveur, jamais exposés au navigateur, avec un accès restreint à
                 l&apos;application.
               </Item>
               <Item>
-                Moindre privilege : nous n&apos;accedons qu&apos;au strict
-                necessaire, et le scope Google utilise est en lecture seule.
+                Moindre privilège : nous n&apos;accédons qu&apos;au strict
+                nécessaire, et le scope Google utilisé est en lecture seule.
               </Item>
               <Item>
-                Revocation et suppression : tu peux revoquer l&apos;acces Google
-                a tout moment depuis ton compte Google. La suppression des
-                donnees est detaillee dans la section Conservation et suppression
+                Révocation et suppression : tu peux révoquer l&apos;accès Google
+                à tout moment depuis ton compte Google. La suppression des
+                données est détaillée dans la section Conservation et suppression
                 ci-dessous.
               </Item>
             </ul>
@@ -154,11 +154,11 @@ export default function PrivacyPage() {
           <Section title="Conservation et suppression">
             <ul className="space-y-3">
               <Item>
-                Desinstallation de l&apos;app Shopify : les donnees de la
-                boutique sont purgees, conformement au webhook shop/redact.
+                Désinstallation de l&apos;app Shopify : les données de la
+                boutique sont purgées, conformément au webhook shop/redact.
               </Item>
               <Item>
-                Suppression de compte : sur demande adressee a{" "}
+                Suppression de compte : sur demande adressée à{" "}
                 <a
                   href="mailto:ethan.aeby08@outlook.com"
                   className="text-brand underline hover:text-brand-ink"

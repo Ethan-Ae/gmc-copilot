@@ -45,7 +45,7 @@ export async function POST(
   }
 
   if (!row.shop || !row.user_id) {
-    await markAuditFailed(id, "Donnees d'audit incompletes.", "unknown").catch(
+    await markAuditFailed(id, "Données d'audit incomplètes.", "unknown").catch(
       () => {},
     );
     return jsonResponse({ error: "invalid_audit_row" }, { status: 500 });

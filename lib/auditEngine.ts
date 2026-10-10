@@ -260,7 +260,19 @@ exact replacement:
   server applies findText/replaceText to each product's own current value,
   never a shared literal. Only use this when the phrase is genuinely
   identical across products; if the correction must differ per product, use
-  one normal issue per product instead.
+  one normal issue per product instead. NEVER use this multi-target
+  find/replace form unless "findText" is verified to literally appear, byte
+  for byte, in EVERY one of those products' real descriptionHtml as given in
+  the "PRODUCT DATA JSON" - if even one target's descriptionHtml is empty, or
+  does not contain "findText", drop that product from "targetIds" (or drop
+  the whole multi-target form if this leaves fewer than two products). For a
+  product whose descriptionHtml is empty or otherwise cannot take this
+  find/replace, do not force it into the shared patch: either give it its own
+  "product_seo" issue with a complete, factual "newValue" description built
+  only from verified data (title, vendor, productType - zero-invention, no
+  "[À COMPLÉTER : ...]" needed if those fields are enough to write a neutral
+  factual sentence), or if no such issue in fact exists for that product, omit
+  it entirely.
 - "currentValue" is the exact wrong value. "newValue" MUST contain the exact
   final text to write (e.g. the fully rewritten description, the exact new
   compare-at price, the full policy body per the "partial" rules above), NEVER
@@ -644,6 +656,56 @@ function enforcePlaceholderGuard(
         ? `À compléter manuellement : ${fields.join(", ")}.`
         : "Informations manquantes à compléter manuellement.") +
       ` Dans Shopify Admin > Paramètres > Politiques > ${label}.`;
+  }
+}
+
+// Server-side safety net for the "MULTIPLE PRODUCTS, SAME FIX" prompt rule
+// above: a find/replace patch (single or multi-target) is only safe to
+// auto-apply if "findText" genuinely appears in the REAL current value of
+// every target it claims to cover. The live Admin API snapshot (not Claude's
+// possibly paraphrased "currentValue") is the source of truth - if even one
+// target's real value does not contain findText (e.g. an empty
+// descriptionHtml), the whole patch is downgraded to manual_only rather than
+// silently dropping that target and later reporting a false "applied"/
+// "appliedCount" once /api/fix finds nothing to replace.
+function enforceFindTextGuard(
+  audit: Record<string, unknown>,
+  fieldSnapshots: Record<string, string>,
+): void {
+  const issues = Array.isArray(audit.issues) ? audit.issues : [];
+  for (const issue of issues) {
+    if (!issue || typeof issue !== "object") continue;
+    const i = issue as Record<string, unknown>;
+    const patch = i.patch;
+    if (!patch || typeof patch !== "object") continue;
+    const p = patch as Record<string, unknown>;
+    if (p.autoApplicable !== true) continue;
+
+    const findText = typeof p.findText === "string" ? p.findText : "";
+    const field = typeof p.field === "string" ? p.field : null;
+    if (!findText || !field) continue;
+
+    const targetIds = Array.isArray(p.targetIds)
+      ? (p.targetIds.filter((t) => typeof t === "string") as string[])
+      : typeof p.targetId === "string"
+        ? [p.targetId]
+        : [];
+    if (targetIds.length === 0) continue;
+
+    const missing = targetIds.some((id) => {
+      const snapshot = fieldSnapshots[`${id}|${field}`];
+      return typeof snapshot !== "string" || !snapshot.includes(findText);
+    });
+    if (!missing) continue;
+
+    p.fixType = "manual_only";
+    p.autoApplicable = false;
+    p.field = null;
+    delete p.targetIds;
+    delete p.findText;
+    delete p.replaceText;
+    i.fix =
+      "Correction à vérifier manuellement : le texte attendu n'a pas été retrouvé tel quel sur ce produit. Vérifiez puis corrigez depuis la fiche produit Shopify.";
   }
 }
 
@@ -1270,6 +1332,8 @@ export async function runAuditForShop(opts: {
         fieldSnapshots[`${p.type}|policy_body`] = p.body ?? "";
       }
     }
+
+    enforceFindTextGuard(audit, fieldSnapshots);
 
     await markAuditDone(auditId, overall, audit, {
       model,

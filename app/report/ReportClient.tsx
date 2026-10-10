@@ -93,19 +93,19 @@ const VERDICT: Record<
   { label: string; rail: string; chip: string; dot: string }
 > = {
   go: {
-    label: "Pret pour la review",
+    label: "Prêt pour la review",
     rail: "border-l-go",
     chip: "bg-go-soft text-go",
     dot: "bg-go",
   },
   warning: {
-    label: "A corriger avant soumission",
+    label: "À corriger avant soumission",
     rail: "border-l-warn",
     chip: "bg-warn-soft text-warn",
     dot: "bg-warn",
   },
   "no-go": {
-    label: "Ne pas soumettre en l'etat",
+    label: "Ne pas soumettre en l'état",
     rail: "border-l-nogo",
     chip: "bg-nogo-soft text-nogo",
     dot: "bg-nogo",
@@ -123,11 +123,11 @@ const SEVERITY: Record<Severity, { label: string; chip: string }> = {
 // replaced by the single banner at the top of the report (see GmcBanner).
 const SOURCE: Partial<Record<IssueSource, { label: string; chip: string }>> = {
   gmc_confirmed: {
-    label: "Confirme par Google",
+    label: "Confirmé par Google",
     chip: "bg-nogo-soft text-nogo",
   },
   both: {
-    label: "Confirme par Google",
+    label: "Confirmé par Google",
     chip: "bg-nogo-soft text-nogo",
   },
 };
@@ -137,13 +137,13 @@ const AREA_LABEL: Record<Area, string> = {
   seo: "SEO",
   pricing: "Prix",
   images: "Images",
-  identity: "Identite",
+  identity: "Identité",
   policy: "Politiques",
   shipping: "Livraison",
   returns: "Retours",
-  claims: "Allegations",
+  claims: "Allégations",
   theme: "Vitrine",
-  "needs-verification": "A verifier",
+  "needs-verification": "À vérifier",
 };
 
 const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
@@ -318,7 +318,7 @@ function ReportInner({ appStoreUrl }: { appStoreUrl: string }) {
         )}
         {shop && state.status === "timeout" && (
           <ErrorView
-            message="L'audit prend plus de temps que prevu et a ete interrompu. Reessaie dans un instant."
+            message="L'audit prend plus de temps que prévu et a été interrompu. Réessaie dans un instant."
             onRetry={retry}
           />
         )}
@@ -364,21 +364,21 @@ function NotConnectedView({
 }) {
   return (
     <section className="rise max-w-lg mx-auto py-10">
-      <p className="tech-label text-warn mb-4">Boutique non connectee</p>
+      <p className="tech-label text-warn mb-4">Boutique non connectée</p>
       <h1 className="text-2xl font-semibold tracking-tight">
-        On n&apos;a pas encore acces a cette boutique.
+        On n&apos;a pas encore accès à cette boutique.
       </h1>
       <p className="mt-3 text-muted leading-relaxed">
         Pour auditer{" "}
         <span className="font-mono text-ink">{shop || "ta boutique"}</span>, on
         a besoin d&apos;une connexion Shopify. C&apos;est une autorisation en
-        lecture, revocable a tout moment.
+        lecture, révocable à tout moment.
       </p>
       <a
         href={appStoreUrl}
         className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
       >
-        Reinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
+        Réinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
         cette boutique.
       </a>
     </section>
@@ -429,7 +429,7 @@ function UnlockButton({
       // Deliberately never rendered from body.error/body.detail: whatever the
       // billing route failed with, the merchant only ever sees this fixed
       // sentence.
-      setActionError("La creation du paiement a echoue. Reessayez.");
+      setActionError("La création du paiement a échoué. Réessayez.");
     } catch {
       setActionError("Le serveur est injoignable.");
     }
@@ -448,7 +448,7 @@ function UnlockButton({
 
 // Shown when POST /api/audits returns audit_limit_reached (402): the free
 // monthly quota is exhausted. This is a normal product state, not a failure -
-// no "Reessayer" button (retrying does nothing until the merchant unlocks
+// no "Réessayer" button (retrying does nothing until the merchant unlocks
 // full access), and the raw "audit_limit_reached" slug is never rendered.
 function QuotaReachedView({ shop }: { shop: string }) {
   return (
@@ -458,13 +458,13 @@ function QuotaReachedView({ shop }: { shop: string }) {
         Limite d&apos;audits gratuits atteinte
       </h1>
       <p className="mt-3 text-muted leading-relaxed">
-        Debloquez la mise en conformite pour auditer cette boutique et
+        Débloquez la mise en conformité pour auditer cette boutique et
         appliquer les correctifs.
       </p>
       <div className="mt-8">
         <UnlockButton
           shop={shop}
-          label="Debloquer - 149 CHF via Shopify"
+          label="Débloquer - 149 CHF via Shopify"
           className="inline-flex bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors disabled:opacity-60"
         />
       </div>
@@ -479,23 +479,23 @@ function QuotaReachedView({ shop }: { shop: string }) {
 // a real signed Shopify launch (see the hardened HMAC gate in
 // app/api/shopify/auth/route.ts) - reconnecting can no longer be a link
 // within the app, only a fresh install from the Shopify App Store. No
-// "Reessayer" button: retrying against a dead token fails the same way again.
+// "Réessayer" button: retrying against a dead token fails the same way again.
 function ReauthRequiredView({ appStoreUrl }: { appStoreUrl: string }) {
   return (
     <section className="rise max-w-lg mx-auto py-10">
-      <p className="tech-label text-warn mb-4">Reconnexion necessaire</p>
+      <p className="tech-label text-warn mb-4">Reconnexion nécessaire</p>
       <h1 className="text-2xl font-semibold tracking-tight">
-        La connexion a votre boutique a expire.
+        La connexion à votre boutique a expiré.
       </h1>
       <p className="mt-3 text-muted leading-relaxed">
-        Reinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
+        Réinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
         cette boutique et relancer l&apos;audit.
       </p>
       <a
         href={appStoreUrl}
         className="inline-flex mt-8 bg-ink hover:bg-white text-paper font-medium rounded-full px-8 py-4 transition-colors"
       >
-        Reinstaller depuis le Shopify App Store
+        Réinstaller depuis le Shopify App Store
       </a>
     </section>
   );
@@ -539,7 +539,7 @@ function GmcBanner() {
   return (
     <div className="rounded-2xl border border-line bg-ink-soft px-4 py-3 text-sm text-muted">
       Connectez Google Merchant Center pour croiser ces risques avec les
-      signalements reels de Google.{" "}
+      signalements réels de Google.{" "}
       <Link href="/dashboard" className="text-brand underline">
         Connecter Google Merchant Center
       </Link>
@@ -564,7 +564,7 @@ function ReauthBanner({ appStoreUrl }: { appStoreUrl: string }) {
       livraison et marchés - certains contrôles (zones, pays, devises)
       n&apos;ont pas pu être vérifiés.{" "}
       <a href={appStoreUrl} className="text-brand underline">
-        Reinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
+        Réinstallez Feedcompliant depuis le Shopify App Store pour reconnecter
         cette boutique.
       </a>
     </div>
@@ -627,12 +627,12 @@ function ResultView({
           <span>{data.shop}</span>
           <span aria-hidden="true">/</span>
           <span>
-            {issues.length} probleme{issues.length > 1 ? "s" : ""}
+            {issues.length} problème{issues.length > 1 ? "s" : ""}
           </span>
           {data.truncated && (
             <>
               <span aria-hidden="true">/</span>
-              <span className="text-warn">Rapport tronque</span>
+              <span className="text-warn">Rapport tronqué</span>
             </>
           )}
         </div>
@@ -642,7 +642,7 @@ function ResultView({
       <section>
         <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
           <h2 className="tech-label text-faint">
-            Problemes detectes ({issues.length})
+            Problèmes détectés ({issues.length})
           </h2>
           {canApplyFixes && autoPatches.length > 0 && (
             <FixAllActions
@@ -654,7 +654,7 @@ function ResultView({
         </div>
         {issues.length === 0 ? (
           <p className="bg-ink-soft border border-line rounded-2xl p-6 text-muted">
-            Aucun probleme detecte sur les donnees inspectees.
+            Aucun problème détecté sur les données inspectées.
           </p>
         ) : (
           <ul className="space-y-4">
@@ -665,6 +665,7 @@ function ResultView({
                 shop={data.shop}
                 auditId={data.auditId}
                 canApplyFixes={canApplyFixes}
+                onRetryAudit={onRetry}
               />
             ))}
           </ul>
@@ -675,7 +676,7 @@ function ResultView({
       {audit.checked?.length > 0 && (
         <section>
           <h2 className="tech-label text-faint mb-4">
-            Points verifies ({audit.checked.length})
+            Points vérifiés ({audit.checked.length})
           </h2>
           <ul className="flex flex-wrap gap-2">
             {audit.checked.map((c, i) => (
@@ -740,8 +741,14 @@ function FixAllActions({
         const body = await res.json().catch(() => null);
 
         // Multi-product fix: the response counts individual products, not
-        // one outcome for the whole issue.
-        if (res.ok && body?.status === "applied" && body?.multi) {
+        // one outcome for the whole issue. "partial" (some but not all
+        // targets written) counts the same way as a full "applied" - only
+        // "failed"/nothing_applied (appliedCount 0) falls through below.
+        if (
+          res.ok &&
+          (body?.status === "applied" || body?.status === "partial") &&
+          body?.multi
+        ) {
           applied += body.appliedCount ?? 0;
           for (const s of (body.skipped ?? []) as { reason: string }[]) {
             skipped.push({ patch, reason: fixReasonMessage(s.reason) });
@@ -763,7 +770,7 @@ function FixAllActions({
 
         let reason: string;
         if (body?.status === "drift") {
-          reason = "Modifie depuis l'audit - relancez un audit.";
+          reason = "Modifié depuis l'audit - relancez un audit.";
         } else if (shared?.kind === "failed") {
           reason = shared.message;
         } else {
@@ -827,8 +834,8 @@ function FixAllActions({
       </button>
       {recap && (
         <p className="text-sm text-muted text-right">
-          {recap.applied} applique{recap.applied > 1 ? "s" : ""}, {recap.skipped.length}{" "}
-          ignore{recap.skipped.length > 1 ? "s" : ""}
+          {recap.applied} appliqué{recap.applied > 1 ? "s" : ""}, {recap.skipped.length}{" "}
+          ignoré{recap.skipped.length > 1 ? "s" : ""}
           {recap.skipped.length > 0 && (
             <>
               {" "}
@@ -852,11 +859,13 @@ function IssueCard({
   shop,
   auditId,
   canApplyFixes,
+  onRetryAudit,
 }: {
   issue: Issue;
   shop: string;
   auditId: string;
   canApplyFixes: boolean;
+  onRetryAudit: () => void;
 }) {
   const sev = SEVERITY[issue.severity] ?? SEVERITY.low;
   const sourceBadge = issue.source ? SOURCE[issue.source] : undefined;
@@ -887,7 +896,12 @@ function IssueCard({
       </div>
       {issue.patch?.autoApplicable ? (
         canApplyFixes ? (
-          <FixActions shop={shop} auditId={auditId} patch={issue.patch} />
+          <FixActions
+            shop={shop}
+            auditId={auditId}
+            patch={issue.patch}
+            onRetryAudit={onRetryAudit}
+          />
         ) : (
           <FixLocked shop={shop} />
         )
@@ -905,7 +919,7 @@ function ManualFix() {
   return (
     <div className="mt-4 border-t border-line pt-4">
       <p className="tech-label text-faint">
-        A corriger manuellement dans Shopify Admin, voir le correctif ci-dessus.
+        À corriger manuellement dans Shopify Admin, voir le correctif ci-dessus.
       </p>
     </div>
   );
@@ -923,7 +937,7 @@ function FixLocked({ shop }: { shop: string }) {
       <div className="rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
         <p className="text-sm text-ink">
           Les corrections automatiques sont incluses dans la mise en
-          conformite. Debloquez l&apos;acces pour appliquer ce correctif.
+          conformité. Débloquez l&apos;accès pour appliquer ce correctif.
         </p>
         <div className="mt-3">
           <UnlockButton
@@ -956,14 +970,25 @@ type MultiAppliedResult = {
   skippedCount: number;
   skipped: { targetId: string; reason: string }[];
 };
+// A multi-product find/replace that wrote to some but not all targets (see
+// app/api/fix/route.ts's handleMultiTarget status "partial") - distinct from
+// MultiAppliedResult so the UI never claims full success for a partial run.
+type MultiPartialResult = {
+  kind: "multi-partial";
+  appliedCount: number;
+  targetCount: number;
+  skipped: { targetId: string; reason: string }[];
+};
 // The three non-blocking outcomes /api/fix always answers with instead of a
 // raw HTTP error (see app/api/fix/route.ts): never paid or access expired,
 // a dead Shopify token, or any other failure (userErrors, resolveTarget
 // error, unexpected exception). None of these are rendered as a blocking
-// error - each gets its own banner with the right call to action.
+// error - each gets its own banner with the right call to action. code is
+// carried through so the client can tell "nothing_applied" (offer to relaunch
+// the audit) apart from every other failure (offer a plain retry).
 type PaymentRequiredResult = { kind: "payment-required"; billingUrl: string; message: string };
 type ReauthRequiredResult = { kind: "reauth-required"; reauthUrl: string };
-type FailedResult = { kind: "failed"; message: string };
+type FailedResult = { kind: "failed"; message: string; code?: string };
 type FixResult =
   | PreviewResult
   | AppliedResult
@@ -971,6 +996,7 @@ type FixResult =
   | RevertedResult
   | MultiPreviewResult
   | MultiAppliedResult
+  | MultiPartialResult
   | PaymentRequiredResult
   | ReauthRequiredResult
   | FailedResult;
@@ -984,13 +1010,13 @@ type FixResult =
 // than the {status:"failed", code, message} contract /api/fix uses.
 const FIX_ERROR_CODE_MESSAGE: Record<string, string> = {
   shopify_reauth_required:
-    "La connexion a Shopify a expire. Reinstallez l'app depuis le Shopify App Store pour la retablir.",
-  shopify_token_error: "La connexion a Shopify a echoue. Reessayez.",
-  target_not_found: "Le produit ou l'element vise n'a pas ete trouve dans la boutique.",
+    "La connexion à Shopify a expiré. Réinstallez l'app depuis le Shopify App Store pour la rétablir.",
+  shopify_token_error: "La connexion à Shopify a échoué. Réessayez.",
+  target_not_found: "Le produit ou l'élément visé n'a pas été trouvé dans la boutique.",
   invalid_field: "Ce champ n'est pas pris en charge pour ce correctif.",
   missing_target_id: "La cible du correctif est introuvable.",
-  fix_type_not_applicable: "Ce correctif ne peut pas etre applique automatiquement.",
-  variant_ambiguous: "Plusieurs variantes correspondent - correction manuelle necessaire.",
+  fix_type_not_applicable: "Ce correctif ne peut pas être appliqué automatiquement.",
+  variant_ambiguous: "Plusieurs variantes correspondent - correction manuelle nécessaire.",
   missing_policy_type: "Le type de politique est manquant.",
   // /api/fix/revert still answers 403 {error:"acces_expire"} (not part of this
   // route's rewrite) - give it the same non-technical wording as the
@@ -1028,7 +1054,13 @@ function sharedFixOutcome(
     return { kind: "failed", message: fixErrorMessage(body) };
   }
   const b = body as
-    | { status?: string; billingUrl?: string; reauthUrl?: string; message?: string }
+    | {
+        status?: string;
+        billingUrl?: string;
+        reauthUrl?: string;
+        message?: string;
+        code?: string;
+      }
     | null;
   if (b?.status === "payment_required") {
     return {
@@ -1043,7 +1075,7 @@ function sharedFixOutcome(
       : { kind: "failed", message: FIX_ERROR_CODE_MESSAGE.shopify_reauth_required };
   }
   if (b?.status === "failed") {
-    return { kind: "failed", message: b.message || fixErrorMessage(body) };
+    return { kind: "failed", message: b.message || fixErrorMessage(body), code: b.code };
   }
   return null;
 }
@@ -1128,14 +1160,16 @@ function FixActions({
   shop,
   auditId,
   patch,
+  onRetryAudit,
 }: {
   shop: string;
   auditId: string;
   patch: FixPatch;
+  onRetryAudit: () => void;
 }) {
   const [busy, setBusy] = useState<null | "preview" | "apply" | "revert">(null);
   const [result, setResult] = useState<FixResult | null>(null);
-  // Lets the "Reessayer" button in the "failed" banner re-run whichever
+  // Lets the "Réessayer" button in the "failed" banner re-run whichever
   // action (preview/apply/revert) produced it, instead of forcing the
   // merchant back to the start of the flow.
   const retryRef = useRef<() => void>(() => {});
@@ -1197,6 +1231,17 @@ function FixActions({
         });
         return;
       }
+      if (res.ok && body?.status === "partial" && body?.multi) {
+        const skipped = (body.skipped ?? []) as { targetId: string; reason: string }[];
+        const appliedCount = body.appliedCount ?? 0;
+        setResult({
+          kind: "multi-partial",
+          appliedCount,
+          targetCount: appliedCount + (body.skippedCount ?? skipped.length),
+          skipped: skipped.map((s) => ({ ...s, reason: fixReasonMessage(s.reason) })),
+        });
+        return;
+      }
       if (res.ok && body?.status === "applied") {
         setResult({
           kind: "applied",
@@ -1247,6 +1292,7 @@ function FixActions({
   const finished =
     result?.kind === "reverted" ||
     result?.kind === "multi-applied" ||
+    result?.kind === "multi-partial" ||
     result?.kind === "payment-required" ||
     result?.kind === "reauth-required";
 
@@ -1260,7 +1306,7 @@ function FixActions({
               disabled={busy !== null}
               className="border border-line-strong hover:border-brand hover:text-brand text-ink font-medium rounded-full px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
             >
-              {busy === "preview" ? "Chargement..." : "Previsualiser"}
+              {busy === "preview" ? "Chargement..." : "Prévisualiser"}
             </button>
             <button
               onClick={apply}
@@ -1289,42 +1335,57 @@ function FixActions({
             <FieldPreview value={result.currentLive || ""} patch={patch} />
           </div>
           <div className="text-muted">
-            <span className="tech-label text-faint">Propose</span>
+            <span className="tech-label text-faint">Proposé</span>
             <FieldPreview value={result.newValue || ""} patch={patch} />
           </div>
           {result.drift && (
             <p className="text-warn font-medium">
-              Modifie depuis l&apos;audit
+              Modifié depuis l&apos;audit
             </p>
           )}
         </div>
       )}
 
       {result?.kind === "applied" && (
-        <p className="mt-3 text-sm text-go font-medium">Applique</p>
+        <p className="mt-3 text-sm text-go font-medium">Appliqué</p>
       )}
 
       {result?.kind === "reverted" && (
-        <p className="mt-3 text-sm text-muted">Correction annulee.</p>
+        <p className="mt-3 text-sm text-muted">Correction annulée.</p>
       )}
 
       {result?.kind === "drift" && (
         <p className="mt-3 text-sm text-warn font-medium">
-          Ce champ a ete modifie depuis l&apos;audit - relancez un audit.
+          Ce champ a été modifié depuis l&apos;audit - relancez un audit.
         </p>
       )}
 
       {result?.kind === "failed" && (
         <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
           <p className="text-sm text-ink">{result.message}</p>
-          <button
-            type="button"
-            onClick={() => retryRef.current()}
-            disabled={busy !== null}
-            className="tech-label mt-3 rounded-full border border-line-strong px-3 py-1.5 text-ink hover:border-brand hover:text-brand disabled:opacity-50"
-          >
-            Réessayer
-          </button>
+          {/* "nothing_applied" means the patch found nothing to change in the
+              live data - the fix itself is stale, so retrying it verbatim
+              would fail again. Only a fresh audit (new field_snapshots) can
+              produce a patch worth retrying. */}
+          {result.code === "nothing_applied" ? (
+            <button
+              type="button"
+              onClick={onRetryAudit}
+              disabled={busy !== null}
+              className="tech-label mt-3 rounded-full border border-line-strong px-3 py-1.5 text-ink hover:border-brand hover:text-brand disabled:opacity-50"
+            >
+              Relancer l&apos;audit
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => retryRef.current()}
+              disabled={busy !== null}
+              className="tech-label mt-3 rounded-full border border-line-strong px-3 py-1.5 text-ink hover:border-brand hover:text-brand disabled:opacity-50"
+            >
+              Réessayer
+            </button>
+          )}
         </div>
       )}
 
@@ -1346,7 +1407,7 @@ function FixActions({
       {result?.kind === "reauth-required" && (
         <div className="mt-3 rounded-xl border border-warn/40 bg-warn-soft/50 p-3">
           <p className="text-sm text-ink">
-            La connexion a Shopify a expire. Reinstallez l&apos;app pour
+            La connexion à Shopify a expiré. Réinstallez l&apos;app pour
             reconnecter cette boutique.
           </p>
           <a
@@ -1360,25 +1421,35 @@ function FixActions({
 
       {result?.kind === "multi-preview" && (
         <p className="mt-3 text-sm text-muted">
-          Concerne {result.targetCount} produit{result.targetCount > 1 ? "s" : ""}, dont{" "}
-          {result.foundCount} avec la phrase encore presente.
+          Concerné {result.targetCount} produit{result.targetCount > 1 ? "s" : ""}, dont{" "}
+          {result.foundCount} avec la phrase encore présente.
         </p>
       )}
 
       {result?.kind === "multi-applied" && (
         <p className="mt-3 text-sm text-go font-medium">
-          {result.appliedCount} produit{result.appliedCount > 1 ? "s" : ""} corrige
+          {result.appliedCount} produit{result.appliedCount > 1 ? "s" : ""} corrigé
           {result.appliedCount > 1 ? "s" : ""}
-          {result.skippedCount > 0 && (
-            <span className="block text-warn font-normal mt-1">
-              {result.skippedCount} ignore{result.skippedCount > 1 ? "s" : ""} :{" "}
-              {result.skipped
-                .map((s) => s.reason)
-                .filter((r, i, arr) => arr.indexOf(r) === i)
-                .join(", ")}
-            </span>
-          )}
         </p>
+      )}
+
+      {result?.kind === "multi-partial" && (
+        <div className="mt-3 text-sm">
+          <p className="text-warn font-medium">
+            {result.appliedCount} produit{result.appliedCount > 1 ? "s" : ""} corrigé
+            {result.appliedCount > 1 ? "s" : ""} sur {result.targetCount}
+          </p>
+          <details className="mt-2 text-muted">
+            <summary className="tech-label text-faint cursor-pointer">
+              {result.skipped.length} ignoré{result.skipped.length > 1 ? "s" : ""}
+            </summary>
+            <ul className="mt-2 space-y-1 list-disc pl-5">
+              {result.skipped.map((s) => (
+                <li key={s.targetId}>{s.reason}</li>
+              ))}
+            </ul>
+          </details>
+        </div>
       )}
     </div>
   );

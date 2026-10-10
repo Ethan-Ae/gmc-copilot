@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Tarifs - Feedcompliant",
   description:
-    "Choisis l'offre pour passer la conformite Google Merchant Center : audit express gratuit, mise en conformite one-shot ou offre agence.",
+    "Choisis l'offre pour passer la conformité Google Merchant Center : audit express gratuit, mise en conformité one-shot ou offre agence.",
 };
 
 type Offer = {
@@ -24,10 +24,10 @@ const OFFERS: Offer[] = [
     eyebrow: "Gratuit",
     name: "Audit express",
     price: "0 CHF",
-    pitch: "Teste une boutique et recois un verdict clair, sans compte.",
+    pitch: "Teste une boutique et reçois un verdict clair, sans compte.",
     features: [
       "Audit public d'une boutique",
-      "2 problemes reveles",
+      "2 problèmes révélés",
       "Verdict go / no-go",
       "Aucune connexion requise",
     ],
@@ -35,18 +35,18 @@ const OFFERS: Offer[] = [
   },
   {
     eyebrow: "One-shot",
-    name: "Mise en conformite",
+    name: "Mise en conformité",
     price: "149 CHF",
     priceNote: "paiement unique",
     pitch:
-      "Acces complet a une boutique pendant 30 jours, du diagnostic aux correctifs, jusqu'a la validation Google.",
+      "Accès complet à une boutique pendant 30 jours, du diagnostic aux correctifs, jusqu'à la validation Google.",
     features: [
-      "1 boutique, acces complet 30 jours",
-      "Rapport complet, tous les problemes",
+      "1 boutique, accès complet 30 jours",
+      "Rapport complet, tous les problèmes",
       "Correctifs en 1 clic",
-      "Audits et re-audits illimites pendant 30 jours",
+      "Audits et re-audits illimités pendant 30 jours",
     ],
-    cta: { label: "Debloquer depuis le tableau de bord", href: "/dashboard" },
+    cta: { label: "Débloquer depuis le tableau de bord", href: "/dashboard" },
     highlight: true,
   },
 ];
@@ -58,11 +58,11 @@ export default function PricingPage() {
       <section className="mx-auto w-full max-w-5xl px-5 pt-16 sm:pt-24 pb-8">
         <p className="tech-label text-brand mb-4">Tarifs</p>
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.05] max-w-2xl">
-          Choisis comment passer la conformite Merchant Center.
+          Choisis comment passer la conformité Merchant Center.
         </h1>
         <p className="mt-4 text-lg text-muted max-w-xl leading-relaxed font-normal">
-          Commence par un audit gratuit, puis debloque le rapport complet et les
-          correctifs quand tu es pret. Pas d&apos;engagement.
+          Commence par un audit gratuit, puis débloque le rapport complet et les
+          correctifs quand tu es prêt. Pas d&apos;engagement.
         </p>
       </section>
 
@@ -75,14 +75,14 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-8 text-center text-sm text-muted max-w-xl mx-auto leading-relaxed">
-          Vous gerez plusieurs boutiques ou une agence ? Ecrivez-nous a{" "}
+          Vous gérez plusieurs boutiques ou une agence ? Écrivez-nous à{" "}
           <a
             href="mailto:ethan.aeby08@outlook.com"
             className="text-brand hover:underline"
           >
             ethan.aeby08@outlook.com
           </a>{" "}
-          pour une offre adaptee.
+          pour une offre adaptée.
         </p>
       </section>
     </main>
@@ -99,7 +99,7 @@ function OfferCard({ offer }: { offer: Offer }) {
     >
       {offer.highlight && (
         <span className="absolute -top-3 left-6 tech-label rounded-full bg-ink px-2 py-1 text-paper">
-          Recommande
+          Recommandé
         </span>
       )}
       <p className="tech-label text-brand mb-2">{offer.eyebrow}</p>

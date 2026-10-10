@@ -156,8 +156,8 @@ export async function POST(req: NextRequest) {
       teaserIssues: [],
       locked: true,
       message:
-        "Cette boutique est protegee par un mot de passe, donc le contenu public " +
-        "n'a pas pu etre analyse. Retirez la protection puis relancez l'audit.",
+        "Cette boutique est protégée par un mot de passe, donc le contenu public " +
+        "n'a pas pu être analysé. Retirez la protection puis relancez l'audit.",
     };
     await saveTeaser(domain, lockedResult);
     return jsonResponse(lockedResult);

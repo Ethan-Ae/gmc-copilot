@@ -364,7 +364,7 @@ async function handleMultiTarget(opts: {
     }
 
     if (!found) {
-      skipped.push({ targetId, reason: "Phrase deja absente de ce produit." });
+      skipped.push({ targetId, reason: "Phrase déjà absente de ce produit." });
       continue;
     }
     if (drift) {
@@ -372,7 +372,7 @@ async function handleMultiTarget(opts: {
         `[fix:multi:drift] shop=${shop} targetId=${targetId} snapshotKey=${key} ` +
           `captured=${JSON.stringify(capturedValue).slice(0, 500)} live=${JSON.stringify(currentLive).slice(0, 500)}`,
       );
-      skipped.push({ targetId, reason: "Modifie depuis l'audit - relancez un audit." });
+      skipped.push({ targetId, reason: "Modifié depuis l'audit - relancez un audit." });
       continue;
     }
 
@@ -398,12 +398,39 @@ async function handleMultiTarget(opts: {
     appliedCount += 1;
   }
 
+  const targetCount = targetIds.length;
+
   if (mode === "preview") {
     return jsonResponse({
       status: "preview",
       multi: true,
-      targetCount: targetIds.length,
+      targetCount,
       results: previewRows,
+    });
+  }
+
+  // Never report "applied" when nothing was actually written: a multi-product
+  // find/replace that finds its text in zero products (e.g. every
+  // descriptionHtml snapshot was empty) must not look like a success.
+  if (appliedCount === 0) {
+    console.warn(`[fix:multi:nothing_applied] shop=${shop} targetCount=${targetCount}`, skipped);
+    return okJson({
+      status: "failed",
+      code: "nothing_applied",
+      multi: true,
+      message:
+        "Aucune modification appliquée : le texte à corriger est absent de ces produits. Relancez l'audit.",
+      skipped,
+    });
+  }
+
+  if (appliedCount < targetCount) {
+    return jsonResponse({
+      status: "partial",
+      multi: true,
+      appliedCount,
+      skippedCount: skipped.length,
+      skipped,
     });
   }
 

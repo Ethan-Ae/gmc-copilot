@@ -30,12 +30,12 @@ export default function MerchantAccountPicker({
         const body = (await res.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setError(body?.error ?? "Echec de l'enregistrement.");
+        setError(body?.error ?? "Échec de l'enregistrement.");
         return;
       }
       router.refresh();
     } catch {
-      setError("Echec de l'enregistrement.");
+      setError("Échec de l'enregistrement.");
     } finally {
       setSaving(false);
     }
